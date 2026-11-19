@@ -7,6 +7,11 @@ CHANGELOG.md.
 
 ## 0.9 (2026-11-19)
 
+- GM accounts: the server's admin page (bot settings, matchmaking, status, the log of GM
+  actions) opens in the browser without a password: `join.cmd admin`, `python3 join.py --admin`,
+  or in join-gui.cmd **Advanced > Open the admin page** (shown only for an account with GM rights
+  on the selected server). The scripts ask the server for a one-time login link that works for
+  one minute.
 - The player counts per region (STATS) are asked at most every 10 seconds per server, to keep
   the server's load low.
 

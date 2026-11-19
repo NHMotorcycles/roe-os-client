@@ -70,6 +70,12 @@ Download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) 
 `python3 join.py` in a terminal. It finds the game in Steam and starts it with Proton. Same
 servers, accounts and voice chat as on Windows (no firewall step).
 
+## :gear: Server admins (GM accounts)
+
+If the server's host made your account a GM, join-gui.cmd shows **Advanced > Open the admin
+page** for it: your browser opens the server's admin page (bots, matchmaking, status), logged in
+as that account. No password: the link works once, for one minute.
+
 ## More
 
 - **Console version:** [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd) works

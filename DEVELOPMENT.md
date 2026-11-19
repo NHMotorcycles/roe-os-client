@@ -28,6 +28,19 @@ If join.cmd says the name is taken, pick another one. If you lost your key, ask 
 
 **On Linux** (Steam with Proton or GE-Proton): download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) the same way and run `python3 join.py` in a terminal (it needs python3, nothing else). It asks the same questions, finds the game in any Steam library (also Flatpak and Snap Steam) and starts it with the Proton that last ran the game, else the newest GE-Proton, else the newest Proton from Steam. `python3 join.py --proton /path/to/proton` (or `PROTON=...`) picks another one; `--game` answers the game question up front, `--server` skips the server list as `-Server` does, `--name` picks the account as `-Name` does; `--voice on|off` turns voice chat on or off (as on Windows, with the backup in `roe-join-backup` in the game folder; `--voice on` also asks for the DLL's folder again); `--dry-run` only shows what it would do; `--help` lists the rest. If it finds no Proton, install GE-Proton (for example with ProtonUp-Qt) or any Proton in Steam. The server and account lists work as on Windows (arrow keys and Enter; a numbered list when the input is not a terminal). Your keys are kept in `~/.config/roe-join`, the same files as `%APPDATA%\roe-join` on Windows, so you can copy them between the two; `--export [FILE]` and `--import FILE` read and write the same backup file as `join.cmd export` and `import`. There is no firewall step on Linux: the game can reach the internet.
 
+### The admin page (GM accounts)
+
+`join.cmd admin` (with `-Server` and `-Name` before it, as for a join), `python3 join.py --admin`
+(with `--server`, `--name`) and join-gui.cmd's **Advanced > Open the admin page** open the
+server's admin page in the default browser. The script asks the account service for the
+account's role (`ROLE <key>`: `OK gm` or `OK player`; join-gui.cmd asks it for every saved
+account when the server is selected and shows the button only for a GM) and then for a one-time
+web ticket (`WEB <key>`: `OK <ticket> <url>`, 60 s, single use, GM accounts only). The page is
+at the address the server names (`roe_server set admin-url URL`), else at
+`https://admin.<the server's domain>`; a server reached by its IP address without an admin URL,
+one without the page (`NONE`) or an older one (`INVALID`) gets a clear message. The server checks
+the GM rights again at the login and at every change, so the hidden button is only convenience.
+
 ## The voice DLL
 
 The game's voice chat (party and squad, and the match's proximity channel) ran over Tencent's

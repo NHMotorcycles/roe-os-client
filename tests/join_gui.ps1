@@ -50,6 +50,34 @@ foreach ($name in (Get-GuiControlNames)) { $gui.C[$name] = $window.FindName($nam
 Check 'main window' (@($gui.C.Values | Where-Object { $null -eq $_ }).Count -eq 0 -and $gui.C.Count -eq (Get-GuiControlNames).Count)
 $dialog = [Windows.Markup.XamlReader]::Parse((Get-InputXaml))
 Check 'input dialog' ($dialog.FindName('AnswerBox') -and $dialog.FindName('OkButton') -and $dialog.FindName('PromptText'))
+# The admin page's part: hidden until the selected account is a GM on the selected server.
+Check 'admin part hidden' ("$($gui.C.AdminPanel.Visibility)" -eq 'Collapsed')
+$ga = 'a' * 64; $gb = 'b' * 64
+$gui.Servers = @([pscustomobject]@{ address = 'a.example' })
+[void]$gui.C.ServerBox.Items.Add('a.example')
+$gui.C.ServerBox.SelectedIndex = 0
+$gui.Accounts = @([pscustomobject]@{ name = 'Anna'; token = $ga }, [pscustomobject]@{ name = 'Ben'; token = $gb })
+foreach ($n in @('Anna', 'Ben', 'Create a new account')) { [void]$gui.C.AccountBox.Items.Add($n) }
+$gui.C.AccountBox.SelectedIndex = 0
+$gui.Roles = @{ $ga = 'gm'; $gb = 'player' }
+$gui.RolesServer = 'a.example'
+Update-AdminPanel
+$shown = "$($gui.C.AdminPanel.Visibility)"
+$gui.C.AccountBox.SelectedIndex = 1
+Update-AdminPanel
+$player = "$($gui.C.AdminPanel.Visibility)"
+$gui.C.AccountBox.SelectedIndex = 2
+Update-AdminPanel
+$new = "$($gui.C.AdminPanel.Visibility)"
+$gui.C.AccountBox.SelectedIndex = 0
+$gui.RolesServer = 'b.example'
+Update-AdminPanel
+$other = "$($gui.C.AdminPanel.Visibility)"
+Check 'admin part: GM only' ($shown -eq 'Visible' -and $player -eq 'Collapsed' -and $new -eq 'Collapsed' -and $other -eq 'Collapsed')
+Check 'admin shown' ((Test-ShowAdmin @{ $ga = 'gm' } ([pscustomobject]@{ token = $ga })) -and -not (Test-ShowAdmin @{ $ga = 'player' } ([pscustomobject]@{ token = $ga })) -and
+    -not (Test-ShowAdmin $null ([pscustomobject]@{ token = $ga })) -and -not (Test-ShowAdmin @{ $ga = 'gm' } $null) -and -not (Test-ShowAdmin @{ '' = 'gm' } ([pscustomobject]@{ token = '' })))
+$gui.Servers = @(); $gui.Accounts = @(); $gui.Roles = $null; $gui.RolesServer = ''
+$gui.C.ServerBox.Items.Clear(); $gui.C.AccountBox.Items.Clear()
 
 # The worker: work in the background, its questions answered here.
 $worker = New-Worker $code
@@ -116,6 +144,19 @@ Save-Accounts $folder ([System.Collections.ArrayList]@([pscustomobject]@{ name =
 $global:Replies = @{ 'INFO' = 'OK players=1 name=Test%20Server'; 'VERSION' = 'OK min=0 current=0'; 'STATS' = 'OK 7,normal,1,0,0,EU'; "NAME $t1" = 'OK Anna' }
 $r = Invoke-ServerJob '127.0.0.5'
 Check 'server step' ($r.Contact.Name -eq 'Test Server' -and $r.Contact.Regions -like 'EU (normal)*' -and $global:Sent -notcontains 'ADDRESSES' -and (Read-Accounts $folder)[0].name -eq 'Anna')
+Check 'server step: no role' ($global:Sent -contains "ROLE $t1" -and $r.Roles.Count -eq 0)
+$global:Replies["ROLE $t1"] = 'OK gm'
+$r = Invoke-ServerJob '127.0.0.5'
+Check 'server step: roles' ($r.Roles[$t1] -eq 'gm' -and $r.Roles.Count -eq 1)
+# Open the admin page: the link of the server's address in the browser; refused for a player.
+function Start-Process { param([Parameter(Position = 0)]$FilePath) $global:Opened = "$FilePath" }
+$global:Replies["WEB $t1"] = "OK $('c' * 64) https%3A%2F%2Fadmin.example.org"
+$url = Invoke-AdminJob '127.0.0.5' $t1
+Check 'admin job' ($url -eq "https://admin.example.org/login?ticket=$('c' * 64)" -and $global:Opened -eq $url)
+$global:Replies["ROLE $t1"] = 'OK player'
+$stop = ''
+try { Invoke-AdminJob '127.0.0.5' $t1 | Out-Null } catch { $stop = $_.Exception.Message }
+Check 'admin job: no GM' ($stop -eq 'This account has no GM rights on this server.')
 
 # The play step with the game and the firewall replaced: the saved account by its key, the server's
 # name saved, the game event, the voice DLL left alone without voice.

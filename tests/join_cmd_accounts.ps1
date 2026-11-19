@@ -154,3 +154,28 @@ Serve @{ 'NEW' = $null }
 Answer @('Erik')
 $r = Connect-Account '1.2.3.4' $off (Read-Accounts $off) $null ''
 Check 'login step without a service' ($r.Uid -eq '1' -and -not $r.Accounts -and $r.Name -eq 'Erik' -and $global:Lobby -eq 'Erik')
+# The admin page (join.cmd admin): the role, then the one-time link, its address from the server
+# or https://admin.<domain>; non-GM accounts and servers without a page get a reason.
+$tk = 'f' * 64
+Check 'roles' ((Get-AccountRole 'OK gm') -eq 'gm' -and (Get-AccountRole 'OK player') -eq 'player' -and (Get-AccountRole 'INVALID') -eq '' -and
+    (Get-AccountRole $null) -eq '' -and (Get-AccountRole 'OK GM') -eq '')
+Check 'domains' ((Test-DomainHost 'roe-os.de') -and (Test-DomainHost 'play.example.org') -and -not (Test-DomainHost '203.0.113.5') -and
+    -not (Test-DomainHost '::1') -and -not (Test-DomainHost 'localhost') -and -not (Test-DomainHost 'a b.de'))
+$l = Get-AdminLink "OK $tk -" 'Roe-OS.de'
+Check 'admin link: default' ($l.Url -eq "https://admin.roe-os.de/login?ticket=$tk" -and -not $l.Problem)
+$l = Get-AdminLink "OK $tk https%3A%2F%2Fpanel.example.org%2F" '203.0.113.5'
+Check 'admin link: the server''s' ($l.Url -eq "https://panel.example.org/login?ticket=$tk" -and -not $l.Problem)
+Check 'admin link: an IP without an address' ((Get-AdminLink "OK $tk -" '203.0.113.5').Problem -like 'This server has no admin page address*')
+Check 'admin link: refused' ((Get-AdminLink 'DENIED' 'roe-os.de').Problem -eq 'This account has no GM rights on this server.' -and
+    (Get-AdminLink 'NONE' 'roe-os.de').Problem -eq 'This server has no admin page.' -and (Get-AdminLink 'INVALID' 'roe-os.de').Problem -eq 'This server has no admin page.' -and
+    (Get-AdminLink $null 'roe-os.de').Problem -eq 'This server has no admin page.' -and (Get-AdminLink 'LIMIT' 'x.de').Problem -like 'Too many*' -and
+    (Get-AdminLink "OK $tk javascript:alert(1)" 'x.de').Problem -like 'The server names no valid*' -and -not (Get-AdminLink "OK $tk javascript:alert(1)" 'x.de').Url)
+Serve @{ "ROLE $t8" = 'OK player' }
+$l = Request-AdminLink '1.2.3.4' $off 'roe-os.de' ([pscustomobject]@{ name = 'Dora'; token = $t8 })
+Check 'admin: a player asks for no ticket' ($l.Problem -eq 'This account has no GM rights on this server.' -and $global:Sent -notcontains "WEB $t8")
+Serve @{ "ROLE $t8" = 'OK gm'; "WEB $t8" = "OK $tk -" }
+$l = Request-AdminLink '1.2.3.4' $off 'roe-os.de' ([pscustomobject]@{ name = 'Dora'; token = $t8 })
+Check 'admin: a GM gets the link' ($l.Url -eq "https://admin.roe-os.de/login?ticket=$tk" -and $global:Sent -contains "WEB $t8")
+Serve @{ "ROLE $t8" = 'INVALID'; "WEB $t8" = 'INVALID' }
+Check 'admin: an older server' ((Request-AdminLink '1.2.3.4' $off 'roe-os.de' ([pscustomobject]@{ name = 'Dora'; token = $t8 })).Problem -eq 'This server has no admin page.')
+Check 'admin: no key' ((Request-AdminLink '1.2.3.4' $off 'roe-os.de' ([pscustomobject]@{ name = 'Dora'; token = '' })).Problem -like 'Choose a saved account*')

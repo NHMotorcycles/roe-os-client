@@ -47,6 +47,9 @@
 # name into one file (default roe-join-accounts.json here); --import FILE merges one into this
 # computer. join.cmd reads and writes the same file (join.cmd export, join.cmd import).
 #
+# GM accounts: --admin (with --server and --name as for a join) opens the server's admin page in the
+# browser with a one-time login link, as join.cmd admin.
+#
 # Nothing else in the game folder is changed. Needs Python 3.8 or newer, nothing else.
 import os
 import sys
@@ -1157,9 +1160,58 @@ def parse_arguments(argv):
     backup.add_argument('--export', nargs='?', const='', metavar='FILE',
                         help=f'write every server\'s accounts (their keys!) into one file ({BACKUP_FILE} by default) for another computer')
     backup.add_argument('--import', dest='import_', metavar='FILE', help='merge such a file (also from join.cmd export) into this computer')
+    parser.add_argument('--admin', action='store_true',
+                        help="GM accounts: open the server's admin page in the browser (with --server and --name as for a join)")
     parser.add_argument('--dry-run', action='store_true', default=bool(os.environ.get('ROE_JOIN_DRY_RUN')),
                         help='print what would be done: no server contact, no files written; also ROE_JOIN_DRY_RUN=1')
     return parser.parse_args(argv)
+
+
+# --- The admin page (GM accounts) ---------------------------------------------------------------
+def account_role(reply):
+    """'gm' or 'player' from the answer to ROLE; '' for an unknown key, an older server or no answer."""
+    return {'OK gm': 'gm', 'OK player': 'player'}.get(reply or '', '')
+
+
+def domain_host(host):
+    """A domain (not an IP address): its admin page is https://admin.<domain> unless the server names another."""
+    try:
+        ipaddress.ip_address(host)
+        return False
+    except ValueError:
+        return bool(re.fullmatch(r'[A-Za-z0-9-]{1,63}(\.[A-Za-z0-9-]{1,63})+', host or ''))
+
+
+def admin_link(reply, host):
+    """(the admin page's one-time login link, None) from the answer to WEB, or (None, why there is none)."""
+    problems = {'DENIED': 'This account has no GM rights on this server.', 'NONE': 'This server has no admin page.',
+                'INVALID': 'This server has no admin page.', 'LIMIT': 'Too many attempts from this address. Try again in a minute.',
+                'BANNED': 'This account or your address is banned on this server.'}
+    if not reply or reply in problems:
+        return None, problems.get(reply or 'NONE')
+    m = re.fullmatch(r'OK ([0-9a-f]{64}) (\S+)', reply)
+    if not m:
+        return None, f'The account service answered: {reply}'
+    ticket, base = m.groups()
+    if base == '-':
+        if not domain_host(host):
+            return None, 'This server has no admin page address (its admin can set one: roe_server set admin-url URL).'
+        base = f'https://admin.{host.lower()}'
+    else:
+        base = urllib.parse.unquote(base)
+        if len(base) > 200 or not re.fullmatch(r'https?://[!-~]+', base):
+            return None, 'The server names no valid admin page address.'
+        base = base.rstrip('/')
+    return f'{base}/login?ticket={ticket}', None
+
+
+def admin_page(request, entry, host):
+    """The login link for a saved account (its role first: a player's account asks for no ticket)."""
+    if not entry or not entry.get('token'):
+        return None, 'Choose a saved account of this server (one with a key).'
+    if account_role(request(f'ROLE {entry["token"]}')) == 'player':
+        return None, 'This account has no GM rights on this server.'
+    return admin_link(request(f'WEB {entry["token"]}'), host)
 
 
 MAX_ADDRESSES = 64
@@ -1414,6 +1466,39 @@ def backup_command(options, settings, root=None, question=ask):
     return 0
 
 
+def admin_command(options, settings, opener=None):
+    """--admin: the server and the account as for a join, then the browser at the admin page."""
+    servers = saved_servers(settings)
+    server = choose_server(servers, options.server).strip()
+    if not server:
+        raise Failure('A server address is needed.')
+    host = server
+    if (m := re.fullmatch(r'(.+):(\d{1,5})', server)):
+        host = m.group(1)
+    try:
+        ip = socket.getaddrinfo(host, None, socket.AF_INET)[0][4][0]
+    except OSError:
+        raise Failure(f'Cannot resolve {host} to an IPv4 address.')
+    folder = CONFIG / 'roe-join' / server_folder_name(server)
+    accounts = [entry for entry in load_accounts(folder) if entry.get('token')]
+    if not accounts:
+        raise Failure('No saved account of this server. Join it once with your GM account first.')
+    entry = choose_account(accounts, options.name)
+    if not entry:
+        raise Failure(f'No saved account named {options.name} for this server.' if options.name else
+                      'Choose a saved account: the admin page is for existing GM accounts.')
+    url, problem = admin_page(lambda line: account(ip, 8002, folder, line), entry, host)
+    if problem:
+        raise Failure(problem)
+    print(f'Opening the admin page for {entry["name"]} in your browser (the link works once, for one minute).')
+    if opener is None:
+        import webbrowser
+        opener = webbrowser.open
+    if not opener(url):
+        print(f'Open this in your browser within a minute: {url}')
+    return 0
+
+
 def main(argv=None):
     options = parse_arguments(sys.argv[1:] if argv is None else argv)
     try:
@@ -1424,6 +1509,8 @@ def main(argv=None):
         settings.pop('voice_dll_sha256', None)  # no longer used
     if options.export is not None or options.import_:
         return backup_command(options, settings)
+    if options.admin:
+        return admin_command(options, settings)
     print('Ring of Elysium 2022: join a server' + (' (dry run)' if options.dry_run else ''))
     print()
     if not options.dry_run:

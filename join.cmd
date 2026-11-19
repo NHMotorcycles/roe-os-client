@@ -54,6 +54,10 @@ exit /b %ROE_JOIN_EXIT%
 # The server can name the oldest version of this script it takes (VERSION); an older one stops
 # before the game starts and says where to get the new one.
 #
+# GM accounts: join.cmd admin (with -Server and -Name as for a join) opens the server's admin page in
+# the browser with a one-time login link (ROLE, then WEB; the server sends the page's address or
+# it is https://admin.<the server's domain>). Other accounts are told they have no GM rights.
+#
 # Account backup: join.cmd export [FILE] writes every server's accounts (their keys), certificate
 # pin and name into one file (default roe-join-accounts.json here); join.cmd import FILE merges
 # one into this computer. join.py reads and writes the same file (--export, --import).
@@ -1395,6 +1399,54 @@ function Connect-Account([string]$Ip, [string]$Folder, $Accounts, $Entry, [strin
     $uid = if ($service) { $login.Uid } else { '1' }
     return [pscustomobject]@{ Uid = $uid; Name = $login.Name; Accounts = $service }
 }
+# --- The admin page (GM accounts) ------------------------------------------------------------
+# An account's role on the server from the answer to ROLE: 'gm', 'player', or '' (an unknown key,
+# an older server without ROLE, no answer). join-gui.cmd shows "Open the admin page" only for gm.
+function Get-AccountRole([string]$Reply) {
+    if ($Reply -ceq 'OK gm') { return 'gm' }
+    if ($Reply -ceq 'OK player') { return 'player' }
+    return ''
+}
+# A domain (not an IP address): its admin page is https://admin.<domain> unless the server names another.
+function Test-DomainHost([string]$HostName) {
+    $address = $null
+    if ([Net.IPAddress]::TryParse($HostName, [ref]$address)) { return $false }
+    return $HostName -match '^[A-Za-z0-9-]{1,63}(\.[A-Za-z0-9-]{1,63})+$'
+}
+# The admin page's one-time login link from the answer to WEB (Url), or why there is none (Problem).
+function Get-AdminLink([string]$Reply, [string]$HostName) {
+    $result = [pscustomobject]@{ Url = ''; Problem = '' }
+    if ($Reply -ceq 'DENIED') { $result.Problem = 'This account has no GM rights on this server.'; return $result }
+    if (-not $Reply -or $Reply -ceq 'NONE' -or $Reply -ceq 'INVALID') { $result.Problem = 'This server has no admin page.'; return $result }
+    if ($Reply -ceq 'LIMIT') { $result.Problem = 'Too many attempts from this address. Try again in a minute.'; return $result }
+    if ($Reply -ceq 'BANNED') { $result.Problem = 'This account or your address is banned on this server.'; return $result }
+    if ($Reply -cnotmatch '^OK ([0-9a-f]{64}) (\S+)') { $result.Problem = "The account service answered: $Reply"; return $result }
+    $ticket = $Matches[1]
+    $base = $Matches[2]
+    if ($base -ceq '-') {
+        if (-not (Test-DomainHost $HostName)) {
+            $result.Problem = 'This server has no admin page address (its admin can set one: roe_server set admin-url URL).'
+            return $result
+        }
+        $base = "https://admin.$($HostName.ToLowerInvariant())"
+    } else {
+        try { $base = [Uri]::UnescapeDataString($base) } catch { $base = '' }
+        if ($base -notmatch '^https?://[!-~]+$' -or $base.Length -gt 200) { $result.Problem = 'The server names no valid admin page address.'; return $result }
+        $base = $base.TrimEnd('/')
+    }
+    $result.Url = "$base/login?ticket=$ticket"
+    return $result
+}
+# Asks the server for the admin page's login link of a saved account (Entry): its role first, so
+# a player's account never asks for a ticket.
+function Request-AdminLink([string]$Ip, [string]$Folder, [string]$HostName, $Entry) {
+    if (-not $Entry -or -not $Entry.token) { return [pscustomobject]@{ Url = ''; Problem = 'Choose a saved account of this server (one with a key).' } }
+    if ((Get-AccountRole (Invoke-Account $Ip $Folder "ROLE $($Entry.token)")) -eq 'player') {
+        return [pscustomobject]@{ Url = ''; Problem = 'This account has no GM rights on this server.' }
+    }
+    return Get-AdminLink (Invoke-Account $Ip $Folder "WEB $($Entry.token)") $HostName
+}
+
 # Our voice DLL in (VoicePick: Get-VoiceChoice's Pick, $null: no voice), then the game, connected
 # to the server. Returns Process and VoiceOn: when true, Restore-Voice once the game exits.
 function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
@@ -1412,6 +1464,7 @@ function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
     return [pscustomobject]@{ Process = $game; VoiceOn = $voiceOn }
 }
 
+$failed = 'Could not join: '
 try {
     $settings = Read-Settings
     Restore-AllVoice  # ours left by a crash or a closed window: the original back first
@@ -1422,7 +1475,7 @@ try {
     if ("$env:ROE_JOIN_ARGS" -match '(^|\s)-Name(\s|$)' -and (-not $givenName -or $givenName.Length -gt 24 -or $givenName -match '[\x00-\x1f]')) {
         throw 'The name must be 1 to 24 characters without control characters.'
     }
-    if ($command -and ($givenName -or $givenServer)) { throw 'Usage: join.cmd [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' }
+    if ($command -and $command -ne 'admin' -and ($givenName -or $givenServer)) { throw ('Usage: join.cmd [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" + 'For GM accounts: join.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)') }
     if ($command -match '^voice(\s+(on|off))?$') {
         $set = $Matches[2]
         if ($set) {
@@ -1466,8 +1519,28 @@ try {
         Write-Host 'You may delete the backup file now.'
         exit 0
     }
+    if ($command -eq 'admin') {
+        # The admin page (GM accounts): the server and the account as for a join, then the browser.
+        $failed = 'Could not open the admin page: '
+        $serverList = @(Read-Servers $settings)
+        $server = "$(Select-Server $serverList $givenServer)".Trim()
+        if (-not $server) { throw 'A server address is needed.' }
+        $hostName = Get-ServerHost $server
+        $serverIp = (Resolve-ServerIps $hostName)[0]
+        $folder = Get-AccountFolder $server
+        $keyed = New-Object Collections.ArrayList
+        foreach ($a in (Read-Accounts $folder)) { if ($a.token) { [void]$keyed.Add($a) } }
+        if (-not $keyed.Count) { throw 'No saved account of this server. Join it once with your GM account first.' }
+        $entry = Select-Account $keyed $givenName
+        if (-not $entry) { throw $(if ($givenName) { "No saved account named $givenName for this server." } else { 'Choose a saved account: the admin page is for existing GM accounts.' }) }
+        $link = Request-AdminLink $serverIp $folder $hostName $entry
+        if ($link.Problem) { throw $link.Problem }
+        Write-Host "Opening the admin page for $($entry.name) in your browser (the link works once, for one minute)."
+        Start-Process $link.Url
+        exit 0
+    }
     if ($command) {
-        if ($command -notmatch '^firewall(\s+(on|off|reset|status))?$') { throw 'Usage: join.cmd [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' }
+        if ($command -notmatch '^firewall(\s+(on|off|reset|status))?$') { throw ('Usage: join.cmd [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" + 'For GM accounts: join.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)') }
         $action = if ($Matches[2]) { $Matches[2].ToLowerInvariant() } else { 'status' }
         $client = $settings.client
         if ($action -eq 'status') { Show-Firewall $client $settings.firewall; exit 0 }
@@ -1576,6 +1649,6 @@ try {
     exit 0
 } catch {
     Write-Host ''
-    Write-Host ('Could not join: ' + $_.Exception.Message) -ForegroundColor Red
+    Write-Host ($failed + $_.Exception.Message) -ForegroundColor Red
     exit 1
 }

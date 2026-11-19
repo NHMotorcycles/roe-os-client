@@ -470,6 +470,30 @@ class FakeService:
 T1, T2, T3, T4, T5 = 'a' * 64, 'b' * 64, 'c' * 64, 'd' * 64, 'e' * 64
 
 
+class AdminPage(unittest.TestCase):
+    """--admin: the role, then the one-time link; its address from the server or https://admin.<domain>."""
+    def test_role_and_link(self):
+        self.assertEqual([join.account_role(r) for r in ('OK gm', 'OK player', 'INVALID', None, 'OK GM')], ['gm', 'player', '', '', ''])
+        self.assertTrue(join.domain_host('roe-os.de') and join.domain_host('play.example.org'))
+        self.assertFalse(join.domain_host('203.0.113.5') or join.domain_host('::1') or join.domain_host('localhost') or join.domain_host('a b.de'))
+        self.assertEqual(join.admin_link(f'OK {T1} -', 'Roe-OS.de'), (f'https://admin.roe-os.de/login?ticket={T1}', None))
+        self.assertEqual(join.admin_link(f'OK {T1} https%3A%2F%2Fpanel.example.org%2F', '203.0.113.5'),
+                         (f'https://panel.example.org/login?ticket={T1}', None))
+        self.assertIn('no admin page address', join.admin_link(f'OK {T1} -', '203.0.113.5')[1])
+        self.assertEqual(join.admin_link('DENIED', 'x.de'), (None, 'This account has no GM rights on this server.'))
+        for reply in ('NONE', 'INVALID', None):
+            self.assertEqual(join.admin_link(reply, 'x.de'), (None, 'This server has no admin page.'))
+        self.assertEqual(join.admin_link(f'OK {T1} javascript:alert(1)', 'x.de')[0], None)
+
+    def test_player_asks_no_ticket(self):
+        service = FakeService({f'ROLE {T1}': 'OK player'})
+        self.assertEqual(join.admin_page(service, {'name': 'Anna', 'token': T1}, 'x.de'), (None, 'This account has no GM rights on this server.'))
+        self.assertEqual(service.sent, [f'ROLE {T1}'])
+        service = FakeService({f'ROLE {T1}': 'OK gm', f'WEB {T1}': f'OK {T2} -'})
+        self.assertEqual(join.admin_page(service, {'name': 'Anna', 'token': T1}, 'x.de'), (f'https://admin.x.de/login?ticket={T2}', None))
+        self.assertIn('saved account', join.admin_page(FakeService({}), {'name': 'Anna', 'token': ''}, 'x.de')[1])
+
+
 class AccountMenu(unittest.TestCase):
     """The saved accounts of a server: menu, accounts.json, login and new accounts."""
     def setUp(self):
@@ -804,7 +828,7 @@ def run_powershell(test, harness, prepare, checks):
 class JoinCmdAccounts(unittest.TestCase):
     """join.cmd's account menu, accounts.json and login against a fake service (through powershell.exe)."""
     def test_functions(self):
-        run_powershell(self, 'join_cmd_accounts.ps1', lambda base: None, 30)
+        run_powershell(self, 'join_cmd_accounts.ps1', lambda base: None, 40)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
@@ -930,7 +954,7 @@ class JoinGui(unittest.TestCase):
         def prepare(base):
             shutil.copyfile(JOIN.parent / 'join-gui.cmd', base / 'join-gui.cmd')
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 22)
+        run_powershell(self, 'join_gui.ps1', prepare, 29)
 
 
 if __name__ == '__main__':

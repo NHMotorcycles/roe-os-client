@@ -11,7 +11,9 @@ exit /b 0
 # Double-click it. The window has the servers joined before (and "Add server..." for another
 # one), with who plays where on the selected one; the accounts on that server ("Create a new
 # account" makes one); the game folder; voice chat; and Play. Under "Advanced": the firewall
-# rules (on, off, reset, show), the account backup (export, import) and the log.
+# rules (on, off, reset, show), the account backup (export, import) and the log; for an account
+# with GM rights on the selected server (ROLE) also "Open the admin page" (for others it is not
+# shown; the server checks the rights again).
 #
 # It is join.cmd in a window: it needs join.cmd in the same folder and loads its functions, so
 # both do the same steps and share their settings, accounts and keys (%APPDATA%\roe-join.json,
@@ -85,16 +87,37 @@ function Invoke-Work([string]$Command, [hashtable]$Arguments) {
 
 # --- Work in the background --------------------------------------------------------------------
 # The selected server: its name, version and who plays where; refreshes the names of its saved
-# accounts (renamed in the game).
+# accounts (renamed in the game) and their roles (Roles: key -> gm or player, ROLE).
 function Invoke-ServerJob([string]$Server) {
     $ips = Resolve-ServerIps (Get-ServerHost $Server)
     $folder = Get-AccountFolder $Server
     $contact = Connect-Server $ips[0] $folder $ips $false 'join-gui.cmd'
+    $roles = @{}
     if ($contact.Info -match '^OK ' -and -not $contact.TooOld) {
         $accounts = Read-Accounts $folder
         if ($accounts.Count -and (Update-AccountNames $ips[0] $folder $accounts)) { Save-Accounts $folder $accounts | Out-Null }
+        foreach ($a in @($accounts | Where-Object { $_.token })) {
+            $role = ''
+            try { $role = Get-AccountRole (Invoke-Account $ips[0] $folder "ROLE $($a.token)") } catch { }
+            if ($role) { $roles[$a.token] = $role }
+        }
     }
-    return [pscustomobject]@{ Server = $Server; Contact = $contact }
+    return [pscustomobject]@{ Server = $Server; Contact = $contact; Roles = $roles }
+}
+# Advanced > Open the admin page: the login link of the account (Token) in the browser.
+function Invoke-AdminJob([string]$Server, [string]$Token) {
+    $hostName = Get-ServerHost $Server
+    $ip = (Resolve-ServerIps $hostName)[0]
+    $folder = Get-AccountFolder $Server
+    $link = Request-AdminLink $ip $folder $hostName ([pscustomobject]@{ token = $Token })
+    if ($link.Problem) { throw $link.Problem }
+    Start-Process $link.Url
+    return $link.Url
+}
+# Whether the admin page's part shows for an account (Entry) of the server: only with GM rights
+# there (Roles from Invoke-ServerJob of that server).
+function Test-ShowAdmin($Roles, $Entry) {
+    return [bool]($Roles -and $Entry -and $Entry.token -and $Roles[$Entry.token] -eq 'gm')
 }
 # Play: the same steps as join.cmd's main part, with the window's answers. Token and AccountName:
 # the saved account (New: a new one); UseVoice false: no voice chat this time. Returns once the
@@ -264,6 +287,12 @@ function Get-GuiXaml {
           <Button x:Name="ImportButton" Margin="0,0,6,6" Content="Import accounts..."/>
           <Button x:Name="LogButton" Margin="0,0,6,6" Content="Open the log"/>
         </WrapPanel>
+        <StackPanel x:Name="AdminPanel" Margin="0,6,0,0" Visibility="Collapsed">
+          <TextBlock TextWrapping="Wrap" Text="This account is a GM on this server: the admin page has its settings (bots, matchmaking) and status, in your browser."/>
+          <WrapPanel Margin="0,6,0,0">
+            <Button x:Name="AdminButton" Margin="0,0,6,6" Content="Open the admin page"/>
+          </WrapPanel>
+        </StackPanel>
       </StackPanel>
     </Expander>
   </StackPanel>
@@ -273,7 +302,7 @@ function Get-GuiXaml {
 function Get-GuiControlNames {
     return @('ServerBox', 'AddServerButton', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
         'PlayButton', 'StatusText', 'DetailsButton', 'DetailsBox', 'AdvancedBox', 'FirewallText', 'FirewallOnButton', 'FirewallOffButton', 'FirewallResetButton',
-        'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton')
+        'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton')
 }
 function Get-InputXaml {
     return @'
@@ -437,7 +466,7 @@ function Complete-Work($Done) {
 function Update-Controls {
     $playing = [bool]$gui.Playing
     foreach ($name in @('ServerBox', 'AddServerButton', 'AccountBox', 'BrowseButton', 'VoiceBox', 'VoiceButton', 'FirewallOnButton', 'FirewallOffButton',
-            'FirewallResetButton', 'FirewallShowButton', 'ExportButton', 'ImportButton')) { $gui.C[$name].IsEnabled = -not $playing }
+            'FirewallResetButton', 'FirewallShowButton', 'ExportButton', 'ImportButton', 'AdminButton')) { $gui.C[$name].IsEnabled = -not $playing }
     $gui.C.PlayButton.IsEnabled = -not $playing
     $gui.C.PlayButton.Content = if ($gui.GameRunning) { 'Game running' } elseif ($playing) { 'Joining...' } else { 'Play' }
 }
@@ -478,6 +507,28 @@ function Update-AccountList {
     } finally {
         $gui.Updating = $false
     }
+    Update-AdminPanel
+}
+# The selected account's saved entry, or $null for "Create a new account".
+function Get-SelectedAccount {
+    $index = $gui.C.AccountBox.SelectedIndex
+    if ($index -ge 0 -and $index -lt @($gui.Accounts).Count) { return $gui.Accounts[$index] }
+    return $null
+}
+# The admin page's part under Advanced: there only for an account with GM rights on the selected server.
+function Update-AdminPanel {
+    $roles = if ($gui.RolesServer -and $gui.RolesServer -eq (Get-SelectedServer)) { $gui.Roles } else { $null }
+    $gui.C.AdminPanel.Visibility = if (Test-ShowAdmin $roles (Get-SelectedAccount)) { 'Visible' } else { 'Collapsed' }
+}
+function Open-GuiAdmin {
+    $server = Get-SelectedServer
+    $entry = Get-SelectedAccount
+    if (-not $server -or -not $entry -or -not $entry.token) { return }
+    Add-Line "Opening the admin page for $($entry.name) ..."
+    Start-Work 'Invoke-AdminJob' @{ Server = $server; Token = "$($entry.token)" } {
+        param($done)
+        if ($done.Ok) { Add-Line 'The admin page is open in your browser (its login link works once, for one minute).' } else { Add-Line "Could not open the admin page: $($done.Message)" 'error' }
+    }
 }
 function Request-ServerInfo {
     $server = Get-SelectedServer
@@ -490,6 +541,8 @@ function Show-ServerInfo($Done) {
     $server = $Done.Result.Server
     if ((Get-SelectedServer) -ne $server) { return }  # another one was selected meanwhile; its request follows
     $contact = $Done.Result.Contact
+    $gui.Roles = $Done.Result.Roles
+    $gui.RolesServer = $server
     if ($contact.Name -and -not $gui.Playing) {
         $servers = @(Read-Servers (Read-Settings))
         if (Set-ServerName $servers $server $contact.Name) { Update-Settings @{ servers = $servers }; Update-ServerList $server }
@@ -501,6 +554,7 @@ function Show-ServerInfo($Done) {
         Update-AccountList
         if ($index -lt $gui.C.AccountBox.Items.Count) { $gui.C.AccountBox.SelectedIndex = $index }
     }
+    Update-AdminPanel
 }
 function Update-GameFolder {
     $gui.C.GameBox.Text = $gui.Client
@@ -601,8 +655,7 @@ function Start-Play {
         }
     }
     Update-Settings @{ voice = $voiceOn }
-    $index = $gui.C.AccountBox.SelectedIndex
-    $entry = if ($index -ge 0 -and $index -lt $gui.Accounts.Count) { $gui.Accounts[$index] } else { $null }
+    $entry = Get-SelectedAccount
     $gui.Playing = $true
     Add-Line "Joining $server ..."
     Start-Work 'Invoke-PlayJob' @{ Client = $gui.Client; Server = $server; Token = "$($entry.token)"; AccountName = "$($entry.name)"; New = ($null -eq $entry); UseVoice = $useVoice } {
@@ -685,6 +738,8 @@ function Start-Gui([string]$Code) {
     $gui.Recent = New-Object Collections.ArrayList
     $gui.Queue = New-Object Collections.ArrayList
     $gui.Job = $null; $gui.Playing = $false; $gui.GameRunning = $false; $gui.Updating = $false; $gui.Draining = $false
+    $gui.Roles = $null; $gui.RolesServer = ''
+
     $gui.Worker = New-Worker $Code
 
     $settings = Read-Settings
@@ -700,7 +755,9 @@ function Start-Gui([string]$Code) {
     Update-Controls
     Set-Text $gui.C.StatusText 'Choose the server and the account, then Play.' 'muted'
 
-    Add-Handler $gui.C.ServerBox 'SelectionChanged' { if (-not $gui.Updating) { Update-AccountList; Request-ServerInfo } }
+    Add-Handler $gui.C.ServerBox 'SelectionChanged' { if (-not $gui.Updating) { $gui.Roles = $null; $gui.RolesServer = ''; Update-AccountList; Request-ServerInfo } }
+    Add-Handler $gui.C.AccountBox 'SelectionChanged' { if (-not $gui.Updating) { Update-AdminPanel } }
+    Add-Handler $gui.C.AdminButton 'Click' { Open-GuiAdmin }
     Add-Handler $gui.C.AddServerButton 'Click' { Add-GuiServer }
     Add-Handler $gui.C.BrowseButton 'Click' { Select-GameFolder }
     Add-Handler $gui.C.VoiceBox 'Click' { Update-Settings @{ voice = [bool]$gui.C.VoiceBox.IsChecked }; Update-Voice }
