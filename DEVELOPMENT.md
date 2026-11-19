@@ -19,7 +19,7 @@ share the settings, accounts and keys. Its batch part decides:
 
 The window's questions are dialogs, the messages go to its status line, its log is
 `%APPDATA%\roe-join\gui.log`. join-gui.cmd (until 0.9 the window, needing join.cmd next to it)
-only runs `join.cmd --window` in 1.0, for old shortcuts, and goes away in the next version.
+is gone since 1.0: join.cmd opens the window.
 
 ## The console scripts
 

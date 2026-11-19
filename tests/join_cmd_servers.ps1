@@ -117,7 +117,7 @@ Check 'now: every region' ((Format-ServerNow 'OK players=0 matches=0 waiting=0 r
 Check 'now: restart notice' ((Format-ServerNow 'OK players=1 restarting=1' $live) -like '*0 matches. It restarts for an update soon*')
 Check 'now: older server' ((Format-ServerNow 'OK players=2 matches=1 waiting=0 restarting=0' 'INVALID') -like 'On the server now: 2 players online, 1 match running*' -and (Format-ServerNow 'OK players=2' $null) -like 'On the server now: 2 players*')
 
-# The steps of a join as functions (join.cmd and join-gui.cmd): the host, the addresses, the folder.
+# The steps of a join as functions (the console and the window): the host, the addresses, the folder.
 $stop = ''
 try { Get-ServerHost 'play.example:8002' | Out-Null } catch { $stop = $_.Exception.Message }
 Check 'server host' ((Get-ServerHost 'play.example:8001') -eq 'play.example' -and (Get-ServerHost '203.0.113.5') -eq '203.0.113.5' -and $stop -like '*only connects to port 8001*:8002*')
@@ -138,12 +138,12 @@ $c = Connect-Server '203.0.113.5' $root @('203.0.113.5')
 Check 'stats at most every 10 s' ($global:Sent -notcontains 'STATS' -and $c.Regions -like 'EU (normal): 1 online*')
 $script:statsCache = $null
 $global:Sent.Clear()
-$c = Connect-Server '203.0.113.5' $root @('203.0.113.5') $false 'join-gui.cmd'
+$c = Connect-Server '203.0.113.5' $root @('203.0.113.5') $false
 Check 'contact without addresses' ($null -eq $c.Listed -and $global:Sent -notcontains 'ADDRESSES' -and $global:Sent -contains 'STATS')
 $global:Replies['VERSION'] = 'OK min=9.0 current=9.0 url=https%3A%2F%2Fexample.org%2Froe'
 $global:Sent.Clear()
-$c = Connect-Server '203.0.113.5' $root @('203.0.113.5') $true 'join-gui.cmd'
-Check 'too old' ($c.TooOld -like 'This join-gui.cmd is version *Download the new join-gui.cmd from https://example.org/roe*' -and $global:Sent -notcontains 'ADDRESSES')
+$c = Connect-Server '203.0.113.5' $root @('203.0.113.5') $true
+Check 'too old' ($c.TooOld -like 'This join.cmd is version *Download the new join.cmd from https://example.org/roe*' -and $global:Sent -notcontains 'ADDRESSES')
 $global:Replies = @{}
 $c = Connect-Server '203.0.113.5' $root @('203.0.113.5')
 Check 'no account service' ($null -eq $c.Info -and $null -eq $c.Listed -and -not $c.Regions -and -not $c.Name)

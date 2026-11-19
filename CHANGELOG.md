@@ -12,8 +12,8 @@ CHANGELOG.md.
   (`join.cmd -Server x`, `join.cmd firewall`, `join.cmd export`, `join.cmd admin`) or without any,
   it works in the prompt as before. `join.cmd --console` forces the console (for example from
   PowerShell), `join.cmd --window` the window. Both use the same steps and settings.
-  join-gui.cmd only starts `join.cmd --window` for this version (old shortcuts keep working);
-  delete it once you use join.cmd.
+  join-gui.cmd is gone: double-click join.cmd for the window (delete an old join-gui.cmd and its
+  shortcuts).
 - The first start offers **ROE-OS (roe-os.de)** as the server: in the window it is selected, in
   the console menu (and in join.py's) Enter takes it, so a new player only picks the account and
   plays. Other servers are added as before; roe-os.de stays in the list.

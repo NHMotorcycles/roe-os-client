@@ -971,7 +971,7 @@ class JoinGui(unittest.TestCase):
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
 class JoinCmdStart(unittest.TestCase):
     """join.cmd's batch part: the window for a double-click (cmd.exe /c, no arguments) or --window,
-    the console with arguments, --console or typed in a prompt; join-gui.cmd forwards to the window."""
+    the console with arguments, --console or typed in a prompt."""
     def run_batch(self, base, line):
         # The line typed into a command prompt (cmd.exe without /c); cmd /c ""<file>" " is how
         # Explorer starts a double-clicked file.
@@ -1004,9 +1004,6 @@ class JoinCmdStart(unittest.TestCase):
             self.assertEqual(self.run_batch(base, f'"{path}"'), ['MODE console []'])
             self.assertEqual(self.run_batch(base, f'"{path}" export'), ['MODE console [export]'])
             self.assertEqual(self.run_batch(base, f'"{path}" --window'), ['MODE window'])
-            # join-gui.cmd (kept for one version) starts the window.
-            shutil.copyfile(JOIN.parent / 'join-gui.cmd', base / 'join-gui.cmd')
-            self.assertEqual(self.run_batch(base, f'cmd /c ""{path[:-len("join.cmd")]}join-gui.cmd" "'), ['MODE window'])
 
 
 if __name__ == '__main__':
