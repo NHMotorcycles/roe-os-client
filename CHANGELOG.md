@@ -7,6 +7,9 @@ CHANGELOG.md.
 
 ## 0.9 (2026-11-19)
 
+- join-gui.cmd: pick the Ring of Elysium folder itself and tick **DirectX 12** for the DX12
+  version (its XVersion folder); an XVersion folder picked directly is recognised. It says which
+  version is missing in the folder. The full folder is saved as before, so join.cmd agrees.
 - GM accounts: the server's admin page (bot settings, matchmaking, status, the log of GM
   actions) opens in the browser without a password: `join.cmd admin`, `python3 join.py --admin`,
   or in join-gui.cmd **Advanced > Open the admin page** (shown only for an account with GM rights

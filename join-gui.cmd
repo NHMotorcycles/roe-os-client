@@ -10,7 +10,8 @@ exit /b 0
 #
 # Double-click it. The window has the servers joined before (and "Add server..." for another
 # one), with who plays where on the selected one; the accounts on that server ("Create a new
-# account" makes one); the game folder; voice chat; and Play. Under "Advanced": the firewall
+# account" makes one); the game folder (the Ring of Elysium folder, with a DirectX 12 box for its
+# XVersion folder); voice chat; and Play. Under "Advanced": the firewall
 # rules (on, off, reset, show), the account backup (export, import) and the log; for an account
 # with GM rights on the selected server (ROLE) also "Open the admin page" (for others it is not
 # shown; the server checks the rights again).
@@ -113,6 +114,32 @@ function Invoke-AdminJob([string]$Server, [string]$Token) {
     if ($link.Problem) { throw $link.Problem }
     Start-Process $link.Url
     return $link.Url
+}
+# A game folder as the window shows it: the Ring of Elysium folder (Base) and whether it is its
+# XVersion folder (Dx12). A saved or picked XVersion folder is its parent with DirectX 12.
+function Split-GameFolder([string]$Folder) {
+    $trimmed = "$Folder".TrimEnd('\', '/')
+    if ($trimmed -and [IO.Path]::GetFileName($trimmed) -eq 'XVersion') {
+        $parent = Split-Path -Parent $trimmed
+        if ($parent) { return [pscustomobject]@{ Base = $parent; Dx12 = $true } }
+    }
+    return [pscustomobject]@{ Base = $trimmed; Dx12 = $false }
+}
+# The folder the game starts from (Folder, '' when it has no Europa_Client.exe) and what is
+# missing (Problem): the XVersion folder with DirectX 12, the folder itself without.
+function Get-GameFolderChoice([string]$Base, [bool]$Dx12) {
+    $result = [pscustomobject]@{ Folder = ''; Problem = '' }
+    if (-not $Base) { $result.Problem = 'Choose the Ring of Elysium folder with Browse...'; return $result }
+    $folder = if ($Dx12) { Join-Path $Base 'XVersion' } else { $Base }
+    if (Test-Client $folder) { $result.Folder = $folder; return $result }
+    if ($Dx12) {
+        $result.Problem = "No DirectX 12 version found in ${Base} (no XVersion\Europa_Client.exe): uncheck DirectX 12."
+    } elseif (Test-Client (Join-Path $Base 'XVersion')) {
+        $result.Problem = "No DirectX 11 version found in ${Base} (no Europa_Client.exe): tick DirectX 12 to play its XVersion folder."
+    } else {
+        $result.Problem = "No Europa_Client.exe in ${Base}: choose the Ring of Elysium folder (usually C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium)."
+    }
+    return $result
 }
 # Whether the admin page's part shows for an account (Entry) of the server: only with GM rights
 # there (Roles from Invoke-ServerJob of that server).
@@ -259,6 +286,7 @@ function Get-GuiXaml {
     <TextBlock Style="{StaticResource Heading}" Text="Game folder"/>
     <DockPanel>
       <Button x:Name="BrowseButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Browse..."/>
+      <CheckBox x:Name="Dx12Box" DockPanel.Dock="Right" Margin="8,0,2,0" VerticalAlignment="Center" Content="DirectX 12"/>
       <TextBox x:Name="GameBox" IsReadOnly="True" VerticalContentAlignment="Center"/>
     </DockPanel>
     <TextBlock x:Name="GameNote" Margin="0,4,0,0" TextWrapping="Wrap"/>
@@ -300,7 +328,7 @@ function Get-GuiXaml {
 '@
 }
 function Get-GuiControlNames {
-    return @('ServerBox', 'AddServerButton', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
+    return @('ServerBox', 'AddServerButton', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'Dx12Box', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
         'PlayButton', 'StatusText', 'DetailsButton', 'DetailsBox', 'AdvancedBox', 'FirewallText', 'FirewallOnButton', 'FirewallOffButton', 'FirewallResetButton',
         'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton')
 }
@@ -465,7 +493,7 @@ function Complete-Work($Done) {
 }
 function Update-Controls {
     $playing = [bool]$gui.Playing
-    foreach ($name in @('ServerBox', 'AddServerButton', 'AccountBox', 'BrowseButton', 'VoiceBox', 'VoiceButton', 'FirewallOnButton', 'FirewallOffButton',
+    foreach ($name in @('ServerBox', 'AddServerButton', 'AccountBox', 'BrowseButton', 'Dx12Box', 'VoiceBox', 'VoiceButton', 'FirewallOnButton', 'FirewallOffButton',
             'FirewallResetButton', 'FirewallShowButton', 'ExportButton', 'ImportButton', 'AdminButton')) { $gui.C[$name].IsEnabled = -not $playing }
     $gui.C.PlayButton.IsEnabled = -not $playing
     $gui.C.PlayButton.Content = if ($gui.GameRunning) { 'Game running' } elseif ($playing) { 'Joining...' } else { 'Play' }
@@ -556,12 +584,39 @@ function Show-ServerInfo($Done) {
     }
     Update-AdminPanel
 }
+# The game folder: the Ring of Elysium folder (GameBase) and the DirectX 12 box (Dx12: its XVersion
+# folder). Client is the resulting folder when it has Europa_Client.exe, else ''.
 function Update-GameFolder {
-    $gui.C.GameBox.Text = $gui.Client
-    if (Test-Client $gui.Client) { Set-Text $gui.C.GameNote '' }
-    else {
-        Set-Text $gui.C.GameNote ('Choose the Ring of Elysium folder with Browse...: usually C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium ' +
-            '(DX11), or its XVersion folder (DX12).') 'warn'
+    $gui.Updating = $true
+    try { $gui.C.Dx12Box.IsChecked = [bool]$gui.Dx12 } finally { $gui.Updating = $false }
+    $gui.C.GameBox.Text = $gui.GameBase
+    $choice = Get-GameFolderChoice $gui.GameBase ([bool]$gui.Dx12)
+    $gui.Client = $choice.Folder
+    if (-not $gui.GameBase) {
+        Set-Text $gui.C.GameNote ('Choose the Ring of Elysium folder with Browse...: usually C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium. ' +
+            'Tick DirectX 12 for the DX12 version.') 'warn'
+    } elseif ($choice.Problem) {
+        Set-Text $gui.C.GameNote $choice.Problem 'warn'
+    } else {
+        Set-Text $gui.C.GameNote $(if ($gui.Dx12) { "The DirectX 12 version: $($choice.Folder)" } else { 'The DirectX 11 version.' }) 'muted'
+    }
+}
+# Checks the game build of the chosen folder in the background and saves it (roe-join.json
+# "client": the full folder, as join.cmd keeps it).
+function Save-GuiGameFolder {
+    if (-not $gui.Client) { Add-Line (Get-GameFolderChoice $gui.GameBase ([bool]$gui.Dx12)).Problem 'error'; return }
+    $folder = $gui.Client
+    Add-Line "Checking the game in $folder ..."
+    Start-Work 'Get-GameFolder' @{ Folder = $folder } {
+        param($done)
+        if (-not $done.Ok) { Add-Line $done.Message 'error'; return }
+        $split = Split-GameFolder $done.Result
+        $gui.GameBase = $split.Base
+        $gui.Dx12 = $split.Dx12
+        Update-Settings @{ client = $done.Result }
+        Update-GameFolder
+        Update-Voice
+        Add-Line "Game folder: $($done.Result) (the tested version)."
     }
 }
 function Update-Voice {
@@ -598,19 +653,19 @@ function Select-Folder([string]$Description, [string]$Start) {
     try { if ("$($dialog.ShowDialog())" -ne 'OK') { return '' }; return $dialog.SelectedPath } finally { $dialog.Dispose() }
 }
 function Select-GameFolder {
-    $path = Select-Folder 'The Ring of Elysium game folder: the one with Europa_Client.exe (XVersion inside it for DX12).' $gui.Client
+    $path = Select-Folder 'The Ring of Elysium folder (usually ...\steamapps\common\Ring of Elysium). Tick DirectX 12 for the DX12 version.' $gui.GameBase
     if (-not $path) { return }
-    if (-not (Test-Client $path)) { Add-Line "No Europa_Client.exe in $path. Choose the Ring of Elysium folder (or its XVersion folder)." 'error'; return }
-    Add-Line "Checking the game in $path ..."
-    Start-Work 'Get-GameFolder' @{ Folder = $path } {
-        param($done)
-        if (-not $done.Ok) { Add-Line $done.Message 'error'; return }
-        $gui.Client = $done.Result
-        Update-Settings @{ client = $gui.Client }
-        Update-GameFolder
-        Update-Voice
-        Add-Line "Game folder: $($gui.Client) (the tested version)."
-    }
+    # An XVersion folder picked directly: the folder above it, with DirectX 12.
+    $split = Split-GameFolder $path
+    $gui.GameBase = $split.Base
+    if ($split.Dx12) { $gui.Dx12 = $true }
+    Update-GameFolder
+    Save-GuiGameFolder
+}
+function Set-GuiDx12 {
+    $gui.Dx12 = [bool]$gui.C.Dx12Box.IsChecked
+    Update-GameFolder
+    if ($gui.GameBase) { Save-GuiGameFolder }
 }
 function Select-VoiceFolder {
     $start = Split-Path -Parent (Get-GuiVoiceDll)
@@ -637,7 +692,11 @@ function Add-GuiServer {
 function Start-Play {
     $server = Get-SelectedServer
     if (-not $server) { Add-Line 'Add the server first: Add server...' 'error'; return }
-    if (-not (Test-Client $gui.Client)) { Add-Line 'Choose the game folder first: Browse...' 'error'; return }
+    if (-not (Test-Client $gui.Client)) {
+        $problem = if ($gui.GameBase) { (Get-GameFolderChoice $gui.GameBase ([bool]$gui.Dx12)).Problem } else { '' }
+        Add-Line $(if ($problem) { $problem } else { 'Choose the game folder first: Browse...' }) 'error'
+        return
+    }
     if ($null -eq (Read-Settings).firewall) {
         $answer = Show-Message ('join-gui.cmd can add Windows Firewall rules so the game reaches only the servers you join (it also tries the ' +
             "publisher's old servers). That needs administrator approval (a Windows prompt) when the allowed addresses change.`n`n" +
@@ -743,11 +802,14 @@ function Start-Gui([string]$Code) {
     $gui.Worker = New-Worker $Code
 
     $settings = Read-Settings
-    $gui.Client = "$($settings.client)"
-    if (-not (Test-Client $gui.Client)) {
+    $saved = "$($settings.client)"
+    if (-not (Test-Client $saved)) {
         $guess = 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium'
-        $gui.Client = if (Test-Client $guess) { $guess } else { '' }
+        $saved = if (Test-Client $guess) { $guess } else { '' }
     }
+    $split = Split-GameFolder $saved
+    $gui.GameBase = $split.Base
+    $gui.Dx12 = $split.Dx12
     Update-GameFolder
     Update-ServerList ''
     Update-Voice
@@ -760,6 +822,7 @@ function Start-Gui([string]$Code) {
     Add-Handler $gui.C.AdminButton 'Click' { Open-GuiAdmin }
     Add-Handler $gui.C.AddServerButton 'Click' { Add-GuiServer }
     Add-Handler $gui.C.BrowseButton 'Click' { Select-GameFolder }
+    Add-Handler $gui.C.Dx12Box 'Click' { if (-not $gui.Updating) { Set-GuiDx12 } }
     Add-Handler $gui.C.VoiceBox 'Click' { Update-Settings @{ voice = [bool]$gui.C.VoiceBox.IsChecked }; Update-Voice }
     Add-Handler $gui.C.VoiceButton 'Click' { Select-VoiceFolder }
     Add-Handler $gui.C.PlayButton 'Click' { Start-Play }

@@ -20,8 +20,8 @@ your desktop). Open each link and click the download arrow at the top right ("Do
    play in each region.
 3. **Create a new account** (first time) or pick yours.
 4. **Game folder:** click **Browse** and pick the Ring of Elysium folder, usually
-   `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium` (or its `XVersion` folder for
-   DX12).
+   `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium`. Tick **DirectX 12** to play
+   the DX12 version.
 5. Click **Play**. The first time, Windows asks for administrator approval for the firewall
    rules: click **Yes**. Leave the window open while you play.
 

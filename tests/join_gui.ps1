@@ -77,6 +77,26 @@ Check 'admin part: GM only' ($shown -eq 'Visible' -and $player -eq 'Collapsed' -
 Check 'admin shown' ((Test-ShowAdmin @{ $ga = 'gm' } ([pscustomobject]@{ token = $ga })) -and -not (Test-ShowAdmin @{ $ga = 'player' } ([pscustomobject]@{ token = $ga })) -and
     -not (Test-ShowAdmin $null ([pscustomobject]@{ token = $ga })) -and -not (Test-ShowAdmin @{ $ga = 'gm' } $null) -and -not (Test-ShowAdmin @{ '' = 'gm' } ([pscustomobject]@{ token = '' })))
 $gui.Servers = @(); $gui.Accounts = @(); $gui.Roles = $null; $gui.RolesServer = ''
+
+# The game folder: the Ring of Elysium folder and the DirectX 12 box (its XVersion folder).
+$both = Join-Path $Base 'roe-both'; $dx11 = Join-Path $Base 'roe-dx11'; $dx12 = Join-Path $Base 'roe-dx12'
+foreach ($f in @((Join-Path $both 'Europa_Client.exe'), (Join-Path $both 'XVersion\Europa_Client.exe'), (Join-Path $dx11 'Europa_Client.exe'), (Join-Path $dx12 'XVersion\Europa_Client.exe'))) {
+    New-Item -ItemType File -Force -Path $f | Out-Null
+}
+$s1 = Split-GameFolder (Join-Path $both 'XVersion'); $s2 = Split-GameFolder "$both\"; $s3 = Split-GameFolder ''
+Check 'game folder: split' ($s1.Base -eq $both -and $s1.Dx12 -and $s2.Base -eq $both -and -not $s2.Dx12 -and $s3.Base -eq '' -and -not $s3.Dx12)
+$c1 = Get-GameFolderChoice $both $true; $c2 = Get-GameFolderChoice $both $false
+Check 'game folder: both versions' ($c1.Folder -eq (Join-Path $both 'XVersion') -and -not $c1.Problem -and $c2.Folder -eq $both -and -not $c2.Problem)
+$c3 = Get-GameFolderChoice $dx11 $true; $c4 = Get-GameFolderChoice $dx12 $false; $c5 = Get-GameFolderChoice (Join-Path $Base 'nothing') $false
+Check 'game folder: what is missing' (-not $c3.Folder -and $c3.Problem -like "No DirectX 12 version found in $dx11*uncheck DirectX 12." -and
+    -not $c4.Folder -and $c4.Problem -like "No DirectX 11 version found in $dx12*tick DirectX 12*" -and -not $c5.Folder -and $c5.Problem -like 'No Europa_Client.exe in *')
+$gui.GameBase = $dx12; $gui.Dx12 = $true
+Update-GameFolder
+$ok = $gui.Client -eq (Join-Path $dx12 'XVersion') -and $gui.C.Dx12Box.IsChecked -and $gui.C.GameBox.Text -eq $dx12
+$gui.Dx12 = $false
+Update-GameFolder
+Check 'game folder: the window' ($ok -and $gui.Client -eq '' -and -not $gui.C.Dx12Box.IsChecked -and $gui.C.GameNote.Text -like 'No DirectX 11 version found*')
+$gui.GameBase = ''; $gui.Dx12 = $false; $gui.Client = ''
 $gui.C.ServerBox.Items.Clear(); $gui.C.AccountBox.Items.Clear()
 
 # The worker: work in the background, its questions answered here.

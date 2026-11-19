@@ -28,6 +28,14 @@ If join.cmd says the name is taken, pick another one. If you lost your key, ask 
 
 **On Linux** (Steam with Proton or GE-Proton): download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) the same way and run `python3 join.py` in a terminal (it needs python3, nothing else). It asks the same questions, finds the game in any Steam library (also Flatpak and Snap Steam) and starts it with the Proton that last ran the game, else the newest GE-Proton, else the newest Proton from Steam. `python3 join.py --proton /path/to/proton` (or `PROTON=...`) picks another one; `--game` answers the game question up front, `--server` skips the server list as `-Server` does, `--name` picks the account as `-Name` does; `--voice on|off` turns voice chat on or off (as on Windows, with the backup in `roe-join-backup` in the game folder; `--voice on` also asks for the DLL's folder again); `--dry-run` only shows what it would do; `--help` lists the rest. If it finds no Proton, install GE-Proton (for example with ProtonUp-Qt) or any Proton in Steam. The server and account lists work as on Windows (arrow keys and Enter; a numbered list when the input is not a terminal). Your keys are kept in `~/.config/roe-join`, the same files as `%APPDATA%\roe-join` on Windows, so you can copy them between the two; `--export [FILE]` and `--import FILE` read and write the same backup file as `join.cmd export` and `import`. There is no firewall step on Linux: the game can reach the internet.
 
+### join-gui.cmd's game folder
+
+join-gui.cmd shows the Ring of Elysium folder and a **DirectX 12** box: checked, the game starts
+from its `XVersion` folder, unchecked from the folder itself. An `XVersion` folder picked
+directly becomes its parent with the box checked. It saves the resulting full folder as
+`client` in roe-join.json, the same setting join.cmd asks for, so both scripts agree, and says
+which version is missing when the folder has no `Europa_Client.exe` for the choice.
+
 ### The admin page (GM accounts)
 
 `join.cmd admin` (with `-Server` and `-Name` before it, as for a join), `python3 join.py --admin`
