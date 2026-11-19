@@ -7,6 +7,14 @@ CHANGELOG.md.
 
 ## 1.0 (2026-11-19)
 
+- Game files changed by other launchers: before the game starts, join.cmd (window and console)
+  and join.py check the files other launchers and lobby patchers change (the game's .sfc
+  archives, the lobby caches, GCloudVoice.dll) against the Steam install and look for files they
+  add (proxy DLLs such as dinput8.dll, data_exp.vfs). When one differs they name it and say to
+  verify the game files in Steam (Ring of Elysium > Properties > Installed Files > Verify
+  integrity of game files) or to delete the added file, then to start again; the game starts
+  only with "Start the game anyway". Only the first start hashes the files (about a second), later
+  ones use the saved hashes. `--skip-file-check` leaves the check out.
 - One file for Windows: **join.cmd** is the window now. Double-click it and the window opens
   (servers, accounts, game folder, voice chat, Play); started in a command prompt with arguments
   (`join.cmd -Server x`, `join.cmd firewall`, `join.cmd export`, `join.cmd admin`) or without any,

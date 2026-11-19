@@ -84,6 +84,14 @@ exit /b !ROE_JOIN_EXIT!
 # %APPDATA%\roe-join\voice-backup\ and put back when the game exits, or at the next start after a
 # crash or a closed window.
 #
+# Game files: before a join, join.cmd checks the files other launchers and lobby patchers change
+# (the .sfc archives they append to, the lobby caches, GCloudVoice.dll) against the Steam install
+# and looks for files a clean install does not have (proxy DLLs such as dinput8.dll, data_exp.vfs).
+# When one differs it says which and how to repair it (Steam's Verify integrity of game files),
+# and starts the game only when the player chooses to start anyway. The hashes are kept by size
+# and write time in %APPDATA%\roe-join\file-check.json, so only the first start hashes the files.
+# join.cmd --skip-file-check leaves the check out.
+#
 # The server can name the oldest version of this script it takes (VERSION); an older one stops
 # before the game starts and says where to get the new one.
 #
@@ -831,6 +839,109 @@ function Install-Voice([string]$Client, [string]$Ours, [string]$Expected) {
     if ($problem) { Write-Host "Voice chat: could not put our $voiceFile into $Client ($problem); starting without voice chat." -ForegroundColor Yellow; return $false }
     Write-Host "Voice chat: on. The game's original $voiceFile is saved in $(Split-Path $original) and put back when the game exits (to do it by hand: copy it from there into $Client)."
     return $true
+}
+
+# --- Game files changed by other launchers ---------------------------------------------------
+# Other launchers and lobby patchers change files of the Ring of Elysium folder (an XVersion
+# folder uses its parent's): blocks appended to the .sfc archives (menus, lobby banners and
+# images, chat texts, the intro video, the DirectX 12 notice) and the lobby room's caches. Their
+# size and SHA-256 in the Steam install of 2022-0.2.989.0. Only these are hashed (about 290 MB,
+# once: the hashes are kept by size and write time in %APPDATA%\roe-join\file-check.json).
+$originalFiles = @(
+    @{ Path = 'SFC\Common.sfc'; Size = 24781543; Sha = '8c220227044411b0282ca08196f68f78183bfe692b1ffdfa6bb9ed41868d0e35' },
+    @{ Path = 'SFC\TableBin.sfc'; Size = 29917290; Sha = 'd665fec68ce52352fcd9f232d3447fafec35a079beb91f514e612733ca1cd288' },
+    @{ Path = 'SFC\UI.sfc'; Size = 145656512; Sha = 'c6ea81c7bce90f9fd370b3f1fe6dce303279ce3b263573ad9b29c874675b07a2' },
+    @{ Path = 'data_dyn.sfc'; Size = 2432544; Sha = '644861de1b3be6b16af2549ceae66a20f258dea057299c989cff4f3c9fae4cf9' },
+    @{ Path = 'data_org_dyn.sfc'; Size = 2432544; Sha = '644861de1b3be6b16af2549ceae66a20f258dea057299c989cff4f3c9fae4cf9' },
+    @{ Path = 'Cache\otherbin.sfc'; Size = 82786448; Sha = 'fdf4844a879acc383242b4264661e6c7700ff2e564b0a2cd57fa5aa9f07b91e3' },
+    @{ Path = 'Cache\Data\world\ActorCreationScreen\ActorCreationScreen.sfc'; Size = 1210287; Sha = 'c60273c83ae486fc854bd6848a263c65c2871c2b6d7e5452269e4c059d99626d' }
+)
+# The game's own GCloudVoice.dll: the main folder's and XVersion's (both signed by Tencent). Ours
+# (the voice backup record's "installed") is expected while voice chat is on.
+$originalVoiceSha = @('1444509a07c560b4f72539cc80b5fe980770566bb7d35f203db9251e850c27ef', 'bc174a98d8899728ec51de63553c7c4a368ccd2d6729f012a2349e69335d9bd4')
+# Files a clean install does not have: a lobby patcher's overlay archive and DLLs that Windows
+# loads into the game in place of its system DLLs (none of these names is part of the game).
+$addedFiles = @('data_exp.vfs', 'dinput8.dll', 'dinput.dll', 'version.dll', 'winmm.dll', 'winhttp.dll', 'wininet.dll',
+    'dxgi.dll', 'd3d9.dll', 'd3d10.dll', 'd3d11.dll', 'd3d12.dll', 'ddraw.dll', 'dsound.dll', 'xinput1_3.dll', 'xinput1_4.dll',
+    'xinput9_1_0.dll', 'opengl32.dll', 'iphlpapi.dll', 'ws2_32.dll', 'wsock32.dll', 'hid.dll', 'msimg32.dll')
+$fileCheckPath = Join-Path $joinRoot 'file-check.json'
+function Read-FileCheckCache {
+    $cache = @{ Files = @{}; Changed = $false }
+    try {
+        $read = Get-Content -LiteralPath $fileCheckPath -Raw | ConvertFrom-Json
+        foreach ($p in $read.files.PSObject.Properties) { $cache.Files[$p.Name] = $p.Value }
+    } catch { }
+    return $cache
+}
+function Save-FileCheckCache($Cache) {
+    if (-not $Cache.Changed) { return }
+    try {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $fileCheckPath) | Out-Null
+        [pscustomobject]@{ files = $Cache.Files } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $fileCheckPath -Encoding UTF8
+    } catch { }
+}
+# A file's SHA-256 (Info: its IO.FileInfo), from Cache while its size and write time are the same.
+function Get-CachedSha([IO.FileInfo]$Info, $Cache) {
+    $key = $Info.FullName.ToLowerInvariant()
+    $time = $Info.LastWriteTimeUtc.Ticks
+    $entry = $Cache.Files[$key]
+    if ($entry -and [int64]$entry.size -eq $Info.Length -and [int64]$entry.time -eq $time -and "$($entry.sha256)") { return "$($entry.sha256)" }
+    $sha = Get-Sha256 $Info.FullName
+    $Cache.Files[$key] = [pscustomobject]@{ size = $Info.Length; time = $time; sha256 = $sha }
+    $Cache.Changed = $true
+    return $sha
+}
+# The Ring of Elysium folder of a game folder: an XVersion folder's parent.
+function Get-GameBase([string]$Client) {
+    $trimmed = $Client.TrimEnd('\', '/')
+    if ([IO.Path]::GetFileName($trimmed) -eq 'XVersion' -and (Split-Path -Parent $trimmed)) { return Split-Path -Parent $trimmed }
+    return $trimmed
+}
+# What differs from the original install for the game folder Client: 'X changed', 'X missing' and
+# 'X added', X below the Ring of Elysium folder. Empty when all is original.
+function Get-ChangedGameFiles([string]$Client) {
+    $base = Get-GameBase $Client
+    $own = if ($base -ne $Client.TrimEnd('\', '/')) { 'XVersion\' } else { '' }
+    $cache = Read-FileCheckCache
+    $found = New-Object Collections.ArrayList
+    foreach ($file in $originalFiles) {
+        $info = New-Object IO.FileInfo (Join-Path $base $file.Path)
+        if (-not $info.Exists) { [void]$found.Add("$($file.Path) missing") }
+        elseif ($info.Length -ne $file.Size -or (Get-CachedSha $info $cache) -ne $file.Sha) { [void]$found.Add("$($file.Path) changed") }
+    }
+    $info = New-Object IO.FileInfo (Join-Path $Client $voiceFile)
+    if (-not $info.Exists) { [void]$found.Add("$own$voiceFile missing") }
+    else {
+        $sha = Get-CachedSha $info $cache
+        $record = Read-VoiceRecord (Get-VoiceBackupFolder $Client)
+        if ($originalVoiceSha -notcontains $sha -and -not ($record -and $sha -eq "$($record.installed)")) { [void]$found.Add("$own$voiceFile changed") }
+    }
+    foreach ($folder in @(@($Client.TrimEnd('\', '/'), $base) | Select-Object -Unique)) {
+        $prefix = if ($folder -ne $base) { 'XVersion\' } else { '' }
+        foreach ($name in $addedFiles) { if (Test-Path -LiteralPath (Join-Path $folder $name) -PathType Leaf) { [void]$found.Add("$prefix$name added") } }
+    }
+    Save-FileCheckCache $cache
+    return [string[]]$found.ToArray()
+}
+# The message for Get-ChangedGameFiles' list, as lines.
+function Get-GameFilesText([string[]]$Found, [string]$Client) {
+    $names = @($Found | Select-Object -First 4) -join ', '
+    if ($Found.Count -gt 4) { $names += ", and $($Found.Count - 4) more" }
+    $lines = @("Your game files were changed by another launcher ($names), so the game may not work with this server.")
+    if (@($Found | Where-Object { $_ -notlike '* added' }).Count) { $lines += "Verify them in $verifyHint." }
+    $added = @($Found | Where-Object { $_ -like '* added' } | ForEach-Object { $_ -replace ' added$', '' })
+    if ($added.Count) { $lines += "Delete $($added -join ', ') in $(Get-GameBase $Client) (not part of the game; Steam's check leaves them)." }
+    $lines += 'Then start again.'
+    return $lines
+}
+# Before a join: when the game files are not the original ones, says so and asks whether to start
+# anyway (no: the join stops). Skip: --skip-file-check.
+function Confirm-GameFiles([string]$Client, [bool]$Skip) {
+    if ($Skip) { Write-Host 'Game file check skipped (--skip-file-check).'; return }
+    $found = @(Get-ChangedGameFiles $Client)
+    if (-not $found.Count) { return }
+    foreach ($line in (Get-GameFilesText $found $Client)) { Write-Host $line -ForegroundColor Yellow }
+    if ((Ask 'Start the game anyway? (y/n)' 'n') -notmatch '^[yY]') { throw 'Cancelled: the game files are not the original ones. Verify them in Steam, then start again.' }
 }
 
 # One request to the account service (TLS). Nothing when the service does not answer (a server
@@ -1625,6 +1736,7 @@ function Test-ShowAdmin($Roles, $Entry) {
 function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [string]$AccountName, [bool]$New, [bool]$UseVoice) {
     $settings = Read-Settings
     $client = Get-GameFolder $Client
+    Confirm-GameFiles $client $false
     $hostName = Get-ServerHost $Server
     $firewall = $settings.firewall
     $voice = $settings.voice
@@ -2380,7 +2492,10 @@ try {
     $settings = Read-Settings
     # --console: this console even without other arguments (the batch part takes --window).
     $argText = ("$env:ROE_JOIN_ARGS" -replace '(^|\s)--console(?=\s|$)', ' ').Trim()
-    $usage = ('Usage: join.cmd [--console] [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" +
+    # --skip-file-check: no check of the game files (for players who changed them on purpose).
+    $skipFileCheck = $argText -match '(^|\s)--skip-file-check(?=\s|$)'
+    $argText = ($argText -replace '(^|\s)--skip-file-check(?=\s|$)', ' ').Trim()
+    $usage = ('Usage: join.cmd [--console] [--skip-file-check] [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" +
         'For GM accounts: join.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)' + "`n" + 'The window: join.cmd without arguments, or join.cmd --window')
     $arguments = Read-Arguments $argText
     # Ours left by a crash or a closed window: the original back first. Not for "admin", which
@@ -2479,6 +2594,7 @@ try {
     if (-not (Test-Client $guess)) { $guess = 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' }
     if (-not (Test-Client $guess)) { $guess = '' }
     $client = Get-GameFolder (Ask 'Game folder (the one with Europa_Client.exe)' $guess)
+    Confirm-GameFiles $client $skipFileCheck
 
     # 2. Server and name.
     $serverList = @(Get-OfferedServers $settings)

@@ -205,6 +205,7 @@ Check 'admin job: no GM' ($stop -eq 'This account has no GM rights on this serve
 # The play step with the game and the firewall replaced: the saved account by its key, the server's
 # name saved, the game event, the voice DLL left alone without voice.
 function Get-GameFolder([string]$Folder) { return $Folder }
+function Confirm-GameFiles([string]$Client, [bool]$Skip) { $global:FilesChecked = @($Client, $Skip) }
 function Update-Firewall([string]$Client, $ServerList, [string]$Server, [string[]]$ServerIps, $Listed, [bool]$Firewall) {
     $global:Firewall = @($Server, (@($Listed) -join ','), $Firewall)
     Set-ServerAddresses $ServerList $Server $Listed ([string[]]@())
@@ -223,7 +224,7 @@ $name = Invoke-PlayJob (Join-Path $Base 'game') '127.0.0.5' $t2 'Ben' $false $fa
 $events = @(); $item = $null
 while ($sync.Events.TryDequeue([ref]$item)) { $events += $item }
 $read = Read-Settings
-Check 'play step' ($name -eq 'Ben' -and $global:Started[1] -eq '77' -and $global:Started[2] -eq '127.0.0.5' -and $null -eq $global:Started[3] -and
+Check 'play step' ($name -eq 'Ben' -and $global:FilesChecked[0] -eq (Join-Path $Base 'game') -and $global:FilesChecked[1] -eq $false -and$global:Started[1] -eq '77' -and $global:Started[2] -eq '127.0.0.5' -and $null -eq $global:Started[3] -and
     $global:Firewall[1] -eq '198.51.100.7' -and $global:Firewall[2] -eq $false -and @($events | Where-Object { $_.Kind -eq 'game' }).Count -eq 1)
 Check 'play saves' ($read.servers[0].address -eq '127.0.0.5' -and $read.servers[0].name -eq 'Test Server' -and $read.voice -eq $true -and
     (@($read.servers[0].addresses) -join ',') -eq '198.51.100.7' -and (Read-Accounts $folder)[0].name -eq 'Ben')

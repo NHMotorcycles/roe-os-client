@@ -959,6 +959,162 @@ class JoinCmdVoice(unittest.TestCase):
         run_powershell(self, 'join_cmd_voice.ps1', prepare, 32)
 
 
+def fake_install(base):
+    """A fake Ring of Elysium folder with an XVersion folder; its files stand for the originals."""
+    game = base / 'game'
+    for rel, text in (('Europa_Client.exe', 'not the game'), ('SFC/Common.sfc', 'common archive'), ('SFC/UI.sfc', 'ui archive'),
+                      ('data_dyn.sfc', 'dyn archive'), ('Cache/otherbin.sfc', 'cache archive'),
+                      ('XVersion/Europa_Client.exe', 'not the dx12 game')):
+        touch(game / rel, text)
+    (game / 'GCloudVoice.dll').write_bytes(fake_dll(b'GetVoiceEngine original'))
+    (game / 'XVersion/GCloudVoice.dll').write_bytes(fake_dll(b'GetVoiceEngine original, dx12'))
+    shutil.copyfile(game / 'XVersion/GCloudVoice.dll', base / 'xversion-voice.dll')
+    return game
+
+
+class GameFiles(unittest.TestCase):
+    """join.py's game file check on a fake install whose files stand for the originals."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+        self.game = fake_install(self.base)
+        self.cache = self.base / 'config/file-check.json'
+        self.backups = self.base / 'backups'
+        saved = (join.ORIGINAL_FILES, join.ORIGINAL_VOICE_SHA)
+        self.addCleanup(lambda: (setattr(join, 'ORIGINAL_FILES', saved[0]), setattr(join, 'ORIGINAL_VOICE_SHA', saved[1])))
+        self.addCleanup(self.tmp.cleanup)
+        join.ORIGINAL_FILES = tuple((rel, (self.game / rel).stat().st_size, join.sha256(self.game / rel))
+                                    for rel in ('SFC/Common.sfc', 'SFC/UI.sfc', 'data_dyn.sfc', 'Cache/otherbin.sfc'))
+        join.ORIGINAL_VOICE_SHA = {join.sha256(self.game / 'GCloudVoice.dll'), join.sha256(self.game / 'XVersion/GCloudVoice.dll')}
+
+    def changed(self, client=None, write=True):
+        return join.changed_game_files(client or self.game, self.backups, self.cache, write)
+
+    def test_lists(self):
+        real = importlib.util.module_from_spec(spec)   # the real lists, not the test's
+        spec.loader.exec_module(real)
+        self.assertEqual(len(real.ORIGINAL_FILES), 7)
+        self.assertTrue(all(re.fullmatch('[0-9a-f]{64}', sha) and size > 0 for _, size, sha in real.ORIGINAL_FILES))
+        self.assertEqual(len(real.ORIGINAL_VOICE_SHA), 2)
+        # The same files and hashes as join.cmd's.
+        cmd = (JOIN.parent / 'join.cmd').read_text()
+        for rel, size, sha in real.ORIGINAL_FILES:
+            self.assertIn(f"@{{ Path = '{rel.replace('/', chr(92))}'; Size = {size}; Sha = '{sha}' }}", cmd)
+        for sha in real.ORIGINAL_VOICE_SHA:
+            self.assertIn(sha, cmd)
+        self.assertIn("'" + "', '".join(real.ADDED_FILES[:7]) + "'", cmd)
+
+    def test_original_and_cache(self):
+        self.assertEqual(self.changed(), [])
+        files = json.loads(self.cache.read_text())['files']
+        ui = str(self.game / 'SFC/UI.sfc')
+        self.assertEqual(len(files), 5)
+        self.assertEqual(files[ui], {'size': (self.game / 'SFC/UI.sfc').stat().st_size,
+                                     'time': (self.game / 'SFC/UI.sfc').stat().st_mtime_ns, 'sha256': join.ORIGINAL_FILES[1][2]})
+        # Trusted while size and time are the same: a wrong hash there counts, nothing is hashed.
+        files[ui]['sha256'] = '0' * 64
+        self.cache.write_text(json.dumps({'files': files}))
+        hashed = []
+        real = join.sha256
+        join.sha256 = lambda path: hashed.append(path) or real(path)
+        try:
+            self.assertEqual(self.changed(), ['SFC/UI.sfc changed'])
+        finally:
+            join.sha256 = real
+        self.assertEqual(hashed, [])
+        self.cache.write_text('not json')
+        self.assertEqual(self.changed(), [])
+        self.assertIn('sha256', self.cache.read_text())
+        # A dry run writes nothing.
+        self.cache.unlink()
+        self.assertEqual(self.changed(write=False), [])
+        self.assertFalse(self.cache.exists())
+
+    def test_changed_missing_added(self):
+        self.changed()
+        ui = self.game / 'SFC/UI.sfc'
+        ui.write_text('UI archive')   # the same size, another time
+        os.utime(ui, ns=(ui.stat().st_atime_ns, ui.stat().st_mtime_ns + 10 ** 9))
+        self.assertEqual(self.changed(), ['SFC/UI.sfc changed'])
+        ui.write_text('ui archive')
+        (self.game / 'SFC/Common.sfc').write_text('common archive and a block')
+        (self.game / 'data_dyn.sfc').unlink()
+        (self.game / 'DInput8.dll').write_text('proxy')
+        (self.game / 'data_exp.vfs').write_text('overlay')
+        (self.game / 'backup-of-another-tool').mkdir()
+        found = self.changed()
+        self.assertEqual(found[:2], ['SFC/Common.sfc changed', 'data_dyn.sfc missing'])
+        self.assertEqual(sorted(found[2:]), ['DInput8.dll added', 'data_exp.vfs added'])
+        text = join.game_files_text(found, self.game)
+        self.assertEqual(len(text), 4)
+        self.assertTrue(text[0].startswith('Your game files were changed by another launcher (SFC/Common.sfc changed, data_dyn.sfc missing'))
+        self.assertEqual(text[1], f'Verify them in {join.VERIFY}.')
+        self.assertTrue(text[2].startswith('Delete ') and text[2].endswith(f" in {self.game} (not part of the game; Steam's check leaves them)."))
+        self.assertEqual(text[3], 'Then start again.')
+        many = join.game_files_text(['a changed', 'b changed', 'c changed', 'd missing', 'e changed', 'f changed'], self.game)
+        self.assertIn('(a changed, b changed, c changed, d missing, and 2 more)', many[0])
+        self.assertEqual(len(join.game_files_text(['x.dll added'], self.game)), 3)   # nothing to verify
+
+    def test_case(self):
+        # A copy on a case-sensitive file system with other cases than the depot's.
+        (self.game / 'SFC').rename(self.game / 'sfc')
+        (self.game / 'sfc/UI.sfc').rename(self.game / 'sfc/ui.SFC')
+        self.assertEqual(self.changed(), [])
+
+    def test_voice(self):
+        dll = self.game / 'GCloudVoice.dll'
+        original = dll.read_bytes()
+        dll.write_bytes(fake_dll(b'GetVoiceEngine ours'))
+        self.assertEqual(self.changed(), ['GCloudVoice.dll changed'])
+        folder = join.voice_backup_dir(self.backups, self.game)
+        folder.mkdir(parents=True)
+        (folder / 'backup.json').write_text(json.dumps({'folder': str(self.game), 'original': join.sha256(self.base / 'xversion-voice.dll'),
+                                                        'installed': join.sha256(dll)}))
+        self.assertEqual(self.changed(), [])
+        dll.unlink()
+        self.assertEqual(self.changed(), ['GCloudVoice.dll missing'])
+        dll.write_bytes(original)
+
+    def test_xversion(self):
+        xversion = self.game / 'XVersion'
+        self.assertEqual(self.changed(xversion), [])
+        (xversion / 'version.dll').write_text('proxy')
+        (xversion / 'GCloudVoice.dll').write_bytes(fake_dll(b'GetVoiceEngine another'))
+        (self.game / 'SFC/UI.sfc').write_text('patched')
+        found = self.changed(xversion)
+        self.assertEqual(found, ['SFC/UI.sfc changed', 'XVersion/GCloudVoice.dll changed', 'XVersion/version.dll added'])
+        self.assertEqual(join.game_files_text(found, xversion)[2],
+                         f"Delete XVersion/version.dll in {self.game} (not part of the game; Steam's check leaves them).")
+        self.assertEqual(self.changed(), ['SFC/UI.sfc changed'])   # the main folder: its own voice DLL
+
+    def test_confirm(self):
+        out = io.StringIO()
+        confirm = lambda **kw: join.confirm_game_files(self.game, self.backups, cache_file=self.cache, **kw)
+        with contextlib.redirect_stdout(out):
+            self.assertTrue(confirm(question=Answers()))
+            (self.game / 'SFC/UI.sfc').write_text('patched')
+            asked = Answers('n')
+            with self.assertRaises(join.Failure) as stop:
+                confirm(question=asked)
+            self.assertIn('Cancelled: the game files are not the original ones', str(stop.exception))
+            self.assertEqual(asked.asked, [('Start the game anyway? (y/n)', 'n')])
+            self.assertFalse(confirm(question=Answers('y')))
+            self.assertFalse(confirm(question=Answers(), dry_run=True))
+            self.assertTrue(confirm(question=Answers(), skip=True))
+        self.assertIn('Then start again.', out.getvalue())
+        self.assertIn('Would ask: Start the game anyway? (y/n)', out.getvalue())
+        self.assertIn('Game file check skipped (--skip-file-check).', out.getvalue())
+        self.assertTrue(join.parse_arguments(['--skip-file-check']).skip_file_check)
+        self.assertFalse(join.parse_arguments([]).skip_file_check)
+
+
+@unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
+class JoinCmdFiles(unittest.TestCase):
+    """join.cmd's game file check: original, changed, missing and added files, XVersion, the cache and the question."""
+    def test_functions(self):
+        run_powershell(self, 'join_cmd_files.ps1', fake_install, 26)
+
+
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinGui(unittest.TestCase):
     """join.cmd's window: its code loads, its windows parse, its worker and its server and play steps (no window shown)."""

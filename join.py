@@ -50,6 +50,13 @@
 # GM accounts: --admin (with --server and --name as for a join) opens the server's admin page in the
 # browser with a one-time login link, as join.cmd admin.
 #
+# Game files: before a join, join.py checks the files other launchers and lobby patchers change (the
+# .sfc archives they append to, the lobby caches, GCloudVoice.dll) against the Steam install and looks
+# for files a clean install does not have (proxy DLLs such as dinput8.dll, data_exp.vfs). When one
+# differs it says which and how to repair it (Steam's Verify integrity of game files) and asks whether
+# to start anyway. The hashes are kept by size and write time in ~/.config/roe-join/file-check.json,
+# so only the first start hashes the files. --skip-file-check leaves the check out.
+#
 # Nothing else in the game folder is changed. Needs Python 3.8 or newer, nothing else.
 import os
 import sys
@@ -1171,6 +1178,8 @@ def parse_arguments(argv):
     backup.add_argument('--import', dest='import_', metavar='FILE', help='merge such a file (also from join.cmd export) into this computer')
     parser.add_argument('--admin', action='store_true',
                         help="GM accounts: open the server's admin page in the browser (with --server and --name as for a join)")
+    parser.add_argument('--skip-file-check', action='store_true',
+                        help='no check of the game files (the ones other launchers change) before the join')
     parser.add_argument('--dry-run', action='store_true', default=bool(os.environ.get('ROE_JOIN_DRY_RUN')),
                         help='print what would be done: no server contact, no files written; also ROE_JOIN_DRY_RUN=1')
     return parser.parse_args(argv)
@@ -1508,6 +1517,153 @@ def admin_command(options, settings, opener=None):
     return 0
 
 
+# --- Game files changed by other launchers -----------------------------------------------------
+# Other launchers and lobby patchers change files of the Ring of Elysium folder (an XVersion folder
+# uses its parent's): blocks appended to the .sfc archives (menus, lobby banners and images, chat
+# texts, the intro video, the DirectX 12 notice) and the lobby room's caches. Their size and SHA-256
+# in the Steam install of 2022-0.2.989.0, as join.cmd's. Only these are hashed (about 290 MB, once:
+# the hashes are kept by size and write time in ~/.config/roe-join/file-check.json).
+ORIGINAL_FILES = (
+    ('SFC/Common.sfc', 24781543, '8c220227044411b0282ca08196f68f78183bfe692b1ffdfa6bb9ed41868d0e35'),
+    ('SFC/TableBin.sfc', 29917290, 'd665fec68ce52352fcd9f232d3447fafec35a079beb91f514e612733ca1cd288'),
+    ('SFC/UI.sfc', 145656512, 'c6ea81c7bce90f9fd370b3f1fe6dce303279ce3b263573ad9b29c874675b07a2'),
+    ('data_dyn.sfc', 2432544, '644861de1b3be6b16af2549ceae66a20f258dea057299c989cff4f3c9fae4cf9'),
+    ('data_org_dyn.sfc', 2432544, '644861de1b3be6b16af2549ceae66a20f258dea057299c989cff4f3c9fae4cf9'),
+    ('Cache/otherbin.sfc', 82786448, 'fdf4844a879acc383242b4264661e6c7700ff2e564b0a2cd57fa5aa9f07b91e3'),
+    ('Cache/Data/world/ActorCreationScreen/ActorCreationScreen.sfc', 1210287,
+     'c60273c83ae486fc854bd6848a263c65c2871c2b6d7e5452269e4c059d99626d'),
+)
+# The game's own GCloudVoice.dll: the main folder's and XVersion's (both signed by Tencent). Ours (the
+# voice backup record's "installed") is expected while voice chat is on.
+ORIGINAL_VOICE_SHA = {'1444509a07c560b4f72539cc80b5fe980770566bb7d35f203db9251e850c27ef',
+                      'bc174a98d8899728ec51de63553c7c4a368ccd2d6729f012a2349e69335d9bd4'}
+# Files a clean install does not have: a lobby patcher's overlay archive and DLLs that Windows (and
+# wine) load into the game in place of its system DLLs (none of these names is part of the game).
+ADDED_FILES = ('data_exp.vfs', 'dinput8.dll', 'dinput.dll', 'version.dll', 'winmm.dll', 'winhttp.dll', 'wininet.dll',
+               'dxgi.dll', 'd3d9.dll', 'd3d10.dll', 'd3d11.dll', 'd3d12.dll', 'ddraw.dll', 'dsound.dll', 'xinput1_3.dll',
+               'xinput1_4.dll', 'xinput9_1_0.dll', 'opengl32.dll', 'iphlpapi.dll', 'ws2_32.dll', 'wsock32.dll', 'hid.dll',
+               'msimg32.dll')
+
+
+def file_check_path():
+    return CONFIG / 'roe-join' / 'file-check.json'
+
+
+def names_in(folder):
+    """The file names of a folder by their lower case (the install's names on a case-sensitive file system)."""
+    try:
+        return {p.name.lower(): p for p in Path(folder).iterdir()}
+    except OSError:
+        return {}
+
+
+def find_file(folder, relative):
+    """relative (with /) below folder, each part matched without case; None when it is not there."""
+    path = Path(folder)
+    for part in relative.split('/'):
+        found = path / part
+        if not found.exists():
+            found = names_in(path).get(part.lower())
+        if found is None:
+            return None
+        path = found
+    return path if path.is_file() else None
+
+
+def cached_sha(path, cache):
+    """A file's SHA-256, from cache while its size and write time are the same."""
+    stat = path.stat()
+    key = str(path)
+    entry = cache['files'].get(key)
+    if isinstance(entry, dict) and entry.get('size') == stat.st_size and entry.get('time') == stat.st_mtime_ns and entry.get('sha256'):
+        return entry['sha256']
+    digest = sha256(path)
+    cache['files'][key] = {'size': stat.st_size, 'time': stat.st_mtime_ns, 'sha256': digest}
+    cache['changed'] = True
+    return digest
+
+
+def game_base(client):
+    """The Ring of Elysium folder of a game folder: an XVersion folder's parent."""
+    client = Path(client)
+    return client.parent if client.name.lower() == 'xversion' else client
+
+
+def changed_game_files(client, backups, cache_file=None, write=True):
+    """What differs from the original install for the game folder client: 'X changed', 'X missing' and 'X added',
+    X below the Ring of Elysium folder. Empty when all is original."""
+    client = Path(client)
+    base = game_base(client)
+    own = 'XVersion/' if base != client else ''
+    cache_file = Path(cache_file or file_check_path())
+    try:
+        files = json.loads(cache_file.read_text(encoding='utf-8'))['files']
+        if not isinstance(files, dict):
+            raise ValueError
+    except (OSError, ValueError, KeyError, TypeError):
+        files = {}
+    cache = {'files': files, 'changed': False}
+    found = []
+    for relative, size, digest in ORIGINAL_FILES:
+        path = find_file(base, relative)
+        if path is None:
+            found.append(f'{relative} missing')
+        elif path.stat().st_size != size or cached_sha(path, cache) != digest:
+            found.append(f'{relative} changed')
+    dll = find_file(client, VOICE_FILE)
+    if dll is None:
+        found.append(f'{own}{VOICE_FILE} missing')
+    else:
+        try:
+            record = json.loads((voice_backup_dir(backups, client) / 'backup.json').read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            record = {}
+        digest = cached_sha(dll, cache)
+        if digest not in ORIGINAL_VOICE_SHA and not (isinstance(record, dict) and digest == record.get('installed')):
+            found.append(f'{own}{VOICE_FILE} changed')
+    for folder, prefix in ((client, own), (base, '')) if own else ((base, ''),):
+        names = names_in(folder)
+        found += [f'{prefix}{names[n].name} added' for n in ADDED_FILES if n in names and names[n].is_file()]
+    if write and cache['changed']:
+        try:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps({'files': files}, indent=2), encoding='utf-8')
+        except OSError:
+            pass
+    return found
+
+
+def game_files_text(found, client):
+    """The message for changed_game_files' list, as lines."""
+    names = ', '.join(found[:4]) + (f', and {len(found) - 4} more' if len(found) > 4 else '')
+    lines = [f'Your game files were changed by another launcher ({names}), so the game may not work with this server.']
+    if any(not f.endswith(' added') for f in found):
+        lines.append(f'Verify them in {VERIFY}.')
+    added = [f[:-len(' added')] for f in found if f.endswith(' added')]
+    if added:
+        lines.append(f"Delete {', '.join(added)} in {game_base(client)} (not part of the game; Steam's check leaves them).")
+    lines.append('Then start again.')
+    return lines
+
+
+def confirm_game_files(client, backups, skip=False, dry_run=False, question=ask, cache_file=None):
+    """Before a join: when the game files are not the original ones, says so and asks whether to start anyway
+    (no: Failure). True when they are original (or the check is skipped)."""
+    if skip:
+        print('Game file check skipped (--skip-file-check).')
+        return True
+    found = changed_game_files(client, backups, cache_file, write=not dry_run)
+    if not found:
+        return True
+    for line in game_files_text(found, client):
+        print(line)
+    if dry_run:
+        print('Would ask: Start the game anyway? (y/n)')
+    elif not question('Start the game anyway? (y/n)', 'n').lower().startswith('y'):
+        raise Failure('Cancelled: the game files are not the original ones. Verify them in Steam, then start again.')
+    return False
+
+
 def main(argv=None):
     options = parse_arguments(sys.argv[1:] if argv is None else argv)
     try:
@@ -1549,6 +1705,8 @@ def main(argv=None):
             raise Failure(message)
         problems.append(message)
         print('Would stop here: ' + message)
+    if not confirm_game_files(client, voice_backups(), options.skip_file_check, options.dry_run) and options.dry_run:
+        problems.append('game files')
 
     # 2. Server and name. The game only connects to lobby port 8001, so a second server needs its own address.
     servers = offered_servers(settings)
