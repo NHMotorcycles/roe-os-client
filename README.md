@@ -6,18 +6,17 @@ and ask what they do.
 
 ## :video_game: How to play (Windows)
 
-**You need:** Ring of Elysium from Steam, and these two files in **one folder** (anywhere, e.g.
-your desktop). Open each link and click the download arrow at the top right ("Download raw file"):
+**You need:** Ring of Elysium from Steam, and this file in a folder of your choice (e.g. your
+desktop). Open the link and click the download arrow at the top right ("Download raw file"):
 
-- [join-gui.cmd](https://github.com/mschnati/roe-os-client/blob/main/join-gui.cmd): the window you start
-- [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd): does the work, keep it next to it
+- [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd): the window you start
 - Optional, for voice chat: [GCloudVoice.dll](https://github.com/mschnati/roe-os-client/raw/main/voice/GCloudVoice.dll), same folder
 
 **Then:**
 
-1. Double-click **join-gui.cmd**. If Windows warns you: **More info > Run anyway**.
-2. **Add server** and enter the address you got, e.g. **roe-os.de**. You see how many people
-   play in each region.
+1. Double-click **join.cmd**. If Windows warns you: **More info > Run anyway**.
+2. The server **ROE-OS (roe-os.de)** is already selected, and you see how many people play in
+   each region. Another server: **Add server** and enter its address.
 3. **Create a new account** (first time) or pick yours.
 4. **Game folder:** click **Browse** and pick the Ring of Elysium folder, usually
    `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium`. Tick **DirectX 12** to play
@@ -50,7 +49,7 @@ Everything is saved, so next time it's just **Play**.
 
 ## :microphone: Voice chat
 
-On by default, if **GCloudVoice.dll** is next to join-gui.cmd (or you pick its folder). The game's
+On by default, if **GCloudVoice.dll** is next to join.cmd (or you pick its folder). The game's
 own voice servers are gone; this DLL replaces them. It's only put into the game folder while you
 play: the game's original file is saved and put back when the game closes.
 
@@ -61,7 +60,7 @@ play: the game's original file is saved and put back when the game closes.
 The script adds Windows Firewall rules so the game can only talk to the servers you joined and
 your own PC, nothing else on the internet. That's why it asks for administrator approval. Else the game will keep sending analytics data to Tencent.
 
-**Game can't connect?** Right-click **join-gui.cmd > Run as administrator** and try again. If it
+**Game can't connect?** Right-click **join.cmd > Run as administrator** and try again. If it
 still fails, the window tells you why under **Details**. Its probably because another launcher you used set some weird firewall settings.
 
 ## :penguin: Linux
@@ -72,14 +71,16 @@ servers, accounts and voice chat as on Windows (no firewall step).
 
 ## :gear: Server admins (GM accounts)
 
-If the server's host made your account a GM, join-gui.cmd shows **Advanced > Open the admin
+If the server's host made your account a GM, the window shows **Advanced > Open the admin
 page** for it: your browser opens the server's admin page (bots, matchmaking, status), logged in
 as that account. No password: the link works once, for one minute.
 
 ## More
 
-- **Console version:** [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd) works
-  on its own too, with commands and options for advanced users.
+- **Console version:** the same join.cmd, started in a command prompt (with or without
+  arguments, or `join.cmd --console`), has commands and options for advanced users.
+- **Had join-gui.cmd?** It is part of join.cmd now: use join.cmd (join-gui.cmd still starts it
+  for this version, then you can delete it).
 - **Details, building and testing:** [DEVELOPMENT.md](DEVELOPMENT.md)
 - **Changes:** [CHANGELOG.md](CHANGELOG.md)
 - **The server:** [ring-of-elysium-open-source](https://github.com/mschnati/ring-of-elysium-open-source)

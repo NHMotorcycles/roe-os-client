@@ -1,13 +1,12 @@
-# join-gui.cmd without a window on screen: it loads join.cmd (Source, copied to a .ps1) the way
-# it does at its start, its windows parse, the worker runspace takes work and asks questions
+# join.cmd's window without a window on screen: it loads join.cmd (Source, copied to a .ps1) the
+# way the window does at its start, its windows parse, the worker runspace takes work and asks questions
 # through the event queue, and its server and play steps work against a fake account service.
 # Prints OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
-$guiFile = Join-Path $Base 'join-gui.cmd'
 $tokens = $null
 $errors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile($guiFile, [ref]$tokens, [ref]$errors)
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Source, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { foreach ($e in $errors) { "FAIL parse: $e" }; exit 2 }
 'OK parse'
 foreach ($f in @($ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] })) {
@@ -24,14 +23,16 @@ function Next-Event([int]$Seconds = 20) {
     return $null
 }
 
-# join.cmd without its main part, then join-gui.cmd's functions over it.
-$missing = ''
-try { Get-JoinCode (Join-Path $Base 'nothing.cmd') $guiFile | Out-Null } catch { $missing = $_.Exception.Message }
-Check 'join.cmd missing' ($missing -like 'join.cmd is missing. join-gui.cmd needs join.cmd in the same folder*')
-$code = Get-JoinCode $Source $guiFile
-Check 'join code' ($code -match 'function Invoke-Login' -and $code -match '\$expectedSha = ' -and $code -notmatch 'Ring of Elysium 2022: join a server''' -and
-    $code -notmatch 'Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms' -and
-    $code.LastIndexOf('function Ask(') -gt $code.IndexOf('function Ask('))
+# join.cmd without its main part (the console's and the window's), Write-Host and Ask replaced.
+$damaged = Join-Path $Base 'damaged.ps1'
+Set-Content -LiteralPath $damaged -Value 'function Broken {'
+$stop = ''
+try { Get-JoinCode $damaged | Out-Null } catch { $stop = $_.Exception.Message }
+Check 'damaged file' ($stop -like 'damaged.ps1 is damaged (line 1*Download it again.')
+$code = Get-JoinCode $Source
+Check 'join code' ($code -match 'function Invoke-Login' -and $code -match '\$expectedSha = ' -and $code -match 'function Start-Gui' -and $code -notmatch 'Ring of Elysium 2022: join a server''' -and
+    $code -notmatch 'Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms' -and $code -notmatch 'ROE_JOIN_WINDOW' -and
+    $code.IndexOf('function Ask(') -ge 0 -and $code.LastIndexOf('function Ask {') -gt $code.IndexOf('function Ask(') -and $code.LastIndexOf('function Write-Host {') -gt 0)
 $env:ROE_JOIN_SELF = Join-Path $Base 'join.cmd'
 . ([ScriptBlock]::Create($code))
 Check 'loaded' ($joinVersion -and (Get-Command Connect-Server -CommandType Function) -and (Get-Command Write-Host).CommandType -eq 'Function')
@@ -149,16 +150,16 @@ $worker.Dispose()
 
 # The firewall text and the server line.
 $text = (Get-GuiFirewallText @('no join.cmd rule for 2 of 2 game programs') (Get-ElevationNote ([pscustomobject]@{ Ok = $false; Reason = 'declined'; Detail = '' })) @() $false) -join "`n"
-Check 'firewall text' ($text -like 'The firewall rules could not be set. The administrator prompt was declined*' -and $text -match 'Right-click join-gui\.cmd > Run as administrator' -and
+Check 'firewall text' ($text -like 'The firewall rules could not be set. The administrator prompt was declined*' -and $text -match 'Right-click join\.cmd > Run as administrator' -and
     $text -match 'off under Advanced' -and $text -match '- no join\.cmd rule')
 $text = (Get-GuiFirewallText @(1..7 | ForEach-Object { "problem $_" }) '' @([pscustomobject]@{ Local = $false }) $true) -join "`n"
 Check 'firewall text: policy, admin' ($text -like 'The firewall rules are not as they should be*' -and $text -match 'and 2 more' -and $text -match 'policy or security product' -and $text -notmatch 'Right-click')
 $line = Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=2'; TooOld = ''; Notice = $null; Regions = 'EU (normal): 2 online, 0 searching, 0 matches | AS (duel): 0 online, 0 searching, 0 matches' })
 Check 'server line' ($line.Level -eq 'info' -and $line.Text -eq "EU (normal): 2 online, 0 searching, 0 matches`nAS (duel): 0 online, 0 searching, 0 matches")
-$line = Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=2 matches=1 waiting=0'; TooOld = ''; Notice = 'A newer join-gui.cmd'; Regions = '' })
-Check 'server line: older server' ($line.Level -eq 'warn' -and $line.Text -like "A newer join-gui.cmd`nOn the server now: 2 players online, 1 match running*")
+$line = Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=2 matches=1 waiting=0'; TooOld = ''; Notice = 'A newer join.cmd'; Regions = '' })
+Check 'server line: older server' ($line.Level -eq 'warn' -and $line.Text -like "A newer join.cmd`nOn the server now: 2 players online, 1 match running*")
 Check 'server line: no service, too old' ((Get-ServerInfoText ([pscustomobject]@{ Info = $null })).Text -like 'No answer from the account service*' -and
-    (Get-ServerInfoText ([pscustomobject]@{ Info = 'OK'; TooOld = 'This join-gui.cmd is version 0.9' })).Level -eq 'error')
+    (Get-ServerInfoText ([pscustomobject]@{ Info = 'OK'; TooOld = 'This join.cmd is version 0.9' })).Level -eq 'error')
 
 # Settings: changed values, the others kept.
 $settingsPath = Join-Path $Base 'roe-join.json'
@@ -167,6 +168,15 @@ Save-JoinSettings 'C:\Game' $true $false 'C:\voice\GCloudVoice.dll' @([pscustomo
 Update-Settings @{ voice = $true }
 $read = Read-Settings
 Check 'settings changed' ($read.voice -eq $true -and $read.firewall -eq $true -and $read.client -eq 'C:\Game' -and $read.voice_dll -eq 'C:\voice\GCloudVoice.dll' -and $read.servers[0].address -eq 'a.example')
+# The first start (no saved servers): roe-os.de selected; a server added keeps it in the list.
+Save-JoinSettings '' $null $null $null @()
+Update-ServerList ''
+$first = @($gui.C.ServerBox.Items) -join ','
+$selected = Get-SelectedServer
+$gui.Servers = @(Add-ServerUse @(Get-OfferedServers (Read-Settings)) 'b.example' 7)
+Check 'first start: roe-os.de' ($first -eq 'ROE-OS (roe-os.de)' -and $selected -eq 'roe-os.de' -and $gui.C.AccountBox.Items.Count -eq 1 -and
+    (@($gui.Servers | ForEach-Object { $_.address }) -join ',') -eq 'b.example,roe-os.de' -and $gui.Servers[1].name -eq 'ROE-OS')
+$gui.Servers = @(); $gui.C.ServerBox.Items.Clear(); $gui.C.AccountBox.Items.Clear()
 
 # The server step against a fake account service: name, regions, renamed accounts.
 $global:Replies = @{}
@@ -223,4 +233,4 @@ Check 'play: account gone' ($stop -like 'The account Gone is no longer saved for
 $global:Replies['VERSION'] = 'OK min=9 current=9'
 $stop = ''
 try { Invoke-PlayJob (Join-Path $Base 'game') '127.0.0.5' $t2 'Ben' $false $false | Out-Null } catch { $stop = $_.Exception.Message }
-Check 'play: too old' ($stop -like 'This join-gui.cmd is version*Download the new join-gui.cmd*')
+Check 'play: too old' ($stop -like 'This join.cmd is version*Download the new join.cmd*')

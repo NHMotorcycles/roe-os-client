@@ -42,6 +42,12 @@ Check 'server option' ((Select-Server $list '5.6.7.8') -eq '5.6.7.8' -and $globa
 Check 'no saved servers' (@(Read-Servers ([pscustomobject]@{ client = '' })).Count -eq 0)
 Answer @('1.2.3.4')
 Check 'first start asks' ((Select-Server @() '') -eq '1.2.3.4' -and $global:Asked.Count -eq 1)
+# The first start offers the default list (roe-os.de): Enter takes it; saved servers replace it.
+$offered = @(Get-OfferedServers ([pscustomobject]@{ client = '' }))
+Check 'first start offers roe-os.de' ($offered.Count -eq 1 -and (Get-ServerLabel $offered[0]) -ceq 'ROE-OS (roe-os.de)' -and $offered[0].last_used -eq 0)
+Answer @('')
+Check 'first start: Enter takes it' ((Select-Server $offered '') -eq 'roe-os.de' -and $global:Asked.Count -eq 1)
+Check 'saved servers offered' ((Addresses @(Get-OfferedServers $settings)) -eq 'a.example,c.example,b.example')
 
 # The use is remembered: on top with its time, once (case ignored); it survives the settings file.
 $list = Add-ServerUse $list 'C.example' 99

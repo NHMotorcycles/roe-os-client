@@ -5,23 +5,35 @@ scripts' (`$joinVersion` in join.cmd, `JOIN_VERSION` in join.py); a server can a
 one (`roe_server set join-min-version`). The server's own changes are in its repository's
 CHANGELOG.md.
 
-## 0.9 (2026-11-19)
+## 1.0 (2026-11-19)
 
-- join-gui.cmd: pick the Ring of Elysium folder itself and tick **DirectX 12** for the DX12
+- One file for Windows: **join.cmd** is the window now. Double-click it and the window opens
+  (servers, accounts, game folder, voice chat, Play); started in a command prompt with arguments
+  (`join.cmd -Server x`, `join.cmd firewall`, `join.cmd export`, `join.cmd admin`) or without any,
+  it works in the prompt as before. `join.cmd --console` forces the console (for example from
+  PowerShell), `join.cmd --window` the window. Both use the same steps and settings.
+  join-gui.cmd only starts `join.cmd --window` for this version (old shortcuts keep working);
+  delete it once you use join.cmd.
+- The first start offers **ROE-OS (roe-os.de)** as the server: in the window it is selected, in
+  the console menu (and in join.py's) Enter takes it, so a new player only picks the account and
+  plays. Other servers are added as before; roe-os.de stays in the list.
+- join.cmd's window: pick the Ring of Elysium folder itself and tick **DirectX 12** for the DX12
   version (its XVersion folder); an XVersion folder picked directly is recognised. It says which
-  version is missing in the folder. The full folder is saved as before, so join.cmd agrees.
+  version is missing in the folder. The full folder is saved as before, so the console agrees.
 - GM accounts: the server's admin page (bot settings, matchmaking, status, the log of GM
   actions) opens in the browser without a password: `join.cmd admin`, `python3 join.py --admin`,
-  or in join-gui.cmd **Advanced > Open the admin page** (shown only for an account with GM rights
+  or in the window **Advanced > Open the admin page** (shown only for an account with GM rights
   on the selected server). The scripts ask the server for a one-time login link that works for
   one minute.
 - The player counts per region (STATS) are asked at most every 10 seconds per server, to keep
   the server's load low.
 - The voice DLL (`voice/GCloudVoice.dll`) is built locally and committed by hand; the GitHub
   Actions workflow no longer runs on push and starts only by hand.
-- join-gui.cmd: **Advanced > Open the admin page** works while the game runs (it has its own
+- The window: **Advanced > Open the admin page** works while the game runs (it has its own
   worker; before, it was disabled during the game). `join.cmd admin` next to a running game no
   longer checks the voice DLL first.
+
+## 0.9 (2026-11-19)
 
 Licensed under GPL-3.0 (`LICENSE`).
 

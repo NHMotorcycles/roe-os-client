@@ -3,14 +3,32 @@
 Everything the [README](README.md) leaves out: the console scripts with their commands and
 options, what they do step by step, the voice DLL, building and testing.
 
+## Window or console: join.cmd
+
+join.cmd is one file with both: the window and the console version run the same functions and
+share the settings, accounts and keys. Its batch part decides:
+
+- **The window** when it has no arguments and was not typed in a command prompt: a double-click
+  (Explorer runs `cmd.exe /c ""...\join.cmd" "`), a shortcut, or `.\join.cmd` from PowerShell
+  all start cmd.exe with `/c`, a command prompt's own cmd.exe has none. `join.cmd --window`
+  forces it. The window runs in a hidden PowerShell (`-WindowStyle Hidden -STA`), so no console
+  stays open.
+- **The console** with any argument (`-Server`, `-Name`, `firewall`, `voice`, `export`,
+  `import`, `admin`), or typed in a command prompt without arguments. `join.cmd --console`
+  forces it, for example from PowerShell.
+
+The window's questions are dialogs, the messages go to its status line, its log is
+`%APPDATA%\roe-join\gui.log`. join-gui.cmd (until 0.9 the window, needing join.cmd next to it)
+only runs `join.cmd --window` in 1.0, for old shortcuts, and goes away in the next version.
+
 ## The console scripts
 
 ### join.cmd (Windows)
 
-1. Double-click `join.cmd`. If Windows shows "Windows protected your PC", click "More info", then "Run anyway".
+1. In a command prompt in the folder of join.cmd, run `join.cmd` (or `join.cmd --console` from PowerShell). If Windows shows "Windows protected your PC", click "More info", then "Run anyway".
 2. It asks two questions. Your answers are remembered: next time press Enter to keep them, or pick from the list.
    - **Game folder**: where Ring of Elysium is installed, usually `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium` for the DX11 version or `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\XVersion` for the DX12 version.
-   - **Server address**: the IP address or domain the host gave you (a domain is kept as you typed it and looked up again at every join). Later starts show the servers you joined before (the last one used on top): choose one with the arrow keys and Enter, or "Enter another server (IP or domain)" at the bottom. `join.cmd -Server <address>` skips the list.
+   - **Server address**: the first start offers ROE-OS (`roe-os.de`, Enter takes it) and "Enter another server (IP or domain)" for the IP address or domain another host gave you (a domain is kept as you typed it and looked up again at every join). Later starts show the servers you joined before (the last one used on top): choose one with the arrow keys and Enter, or "Enter another server (IP or domain)" at the bottom. `join.cmd -Server <address>` skips the list.
 
    The first time on a server it creates your account. If the server lets you create your character in the game, you pick your name there; otherwise join.cmd asks for the name you want to play under. Later starts show your accounts on that server (the last one used on top, each under its current name): choose one with the arrow keys and Enter, or "Create a new account" at the bottom. `join.cmd -Name <name>` skips the list: it uses your account of that name, or creates one with it.
 3. Windows asks for administrator approval once (and again when you join another server).
@@ -28,20 +46,20 @@ If join.cmd says the name is taken, pick another one. If you lost your key, ask 
 
 **On Linux** (Steam with Proton or GE-Proton): download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) the same way and run `python3 join.py` in a terminal (it needs python3, nothing else). It asks the same questions, finds the game in any Steam library (also Flatpak and Snap Steam) and starts it with the Proton that last ran the game, else the newest GE-Proton, else the newest Proton from Steam. `python3 join.py --proton /path/to/proton` (or `PROTON=...`) picks another one; `--game` answers the game question up front, `--server` skips the server list as `-Server` does, `--name` picks the account as `-Name` does; `--voice on|off` turns voice chat on or off (as on Windows, with the backup in `roe-join-backup` in the game folder; `--voice on` also asks for the DLL's folder again); `--dry-run` only shows what it would do; `--help` lists the rest. If it finds no Proton, install GE-Proton (for example with ProtonUp-Qt) or any Proton in Steam. The server and account lists work as on Windows (arrow keys and Enter; a numbered list when the input is not a terminal). Your keys are kept in `~/.config/roe-join`, the same files as `%APPDATA%\roe-join` on Windows, so you can copy them between the two; `--export [FILE]` and `--import FILE` read and write the same backup file as `join.cmd export` and `import`. There is no firewall step on Linux: the game can reach the internet.
 
-### join-gui.cmd's game folder
+### The window's game folder
 
-join-gui.cmd shows the Ring of Elysium folder and a **DirectX 12** box: checked, the game starts
+The window shows the Ring of Elysium folder and a **DirectX 12** box: checked, the game starts
 from its `XVersion` folder, unchecked from the folder itself. An `XVersion` folder picked
 directly becomes its parent with the box checked. It saves the resulting full folder as
-`client` in roe-join.json, the same setting join.cmd asks for, so both scripts agree, and says
+`client` in roe-join.json, the same setting the console asks for, so both agree, and says
 which version is missing when the folder has no `Europa_Client.exe` for the choice.
 
 ### The admin page (GM accounts)
 
 `join.cmd admin` (with `-Server` and `-Name` before it, as for a join), `python3 join.py --admin`
-(with `--server`, `--name`) and join-gui.cmd's **Advanced > Open the admin page** open the
+(with `--server`, `--name`) and the window's **Advanced > Open the admin page** open the
 server's admin page in the default browser. The script asks the account service for the
-account's role (`ROLE <key>`: `OK gm` or `OK player`; join-gui.cmd asks it for every saved
+account's role (`ROLE <key>`: `OK gm` or `OK player`; the window asks it for every saved
 account when the server is selected and shows the button only for a GM) and then for a one-time
 web ticket (`WEB <key>`: `OK <ticket> <url>`, 60 s, single use, GM accounts only). The page is
 at the address the server names (`roe_server set admin-url URL`), else at
@@ -53,7 +71,7 @@ the GM rights again at the login and at every change, so the hidden button is on
 
 The game's voice chat (party and squad, and the match's proximity channel) ran over Tencent's
 GVoice servers, which are gone. [voice/GCloudVoice.dll](https://github.com/mschnati/roe-os-client/raw/main/voice/GCloudVoice.dll)
-replaces the game's `GCloudVoice.dll`; join-gui.cmd, join.cmd and join.py put it into the game
+replaces the game's `GCloudVoice.dll`; join.cmd and join.py put it into the game
 folder while the game runs (they ask once) and put the original back afterwards. It talks to the
 server's voice relay (UDP port 10101). In the game, the voice settings work as before: free talk
 or push-to-talk, channel Team or All, volumes. Its log is `GCloudVoice.log` next to the DLL in the
@@ -90,6 +108,7 @@ The server's repository has this folder as `client/` and builds its voice relay 
 python3 -m unittest discover -s tests -p test_join.py
 ```
 
-join.py against fake Steam trees and game folders; in WSL also join.cmd's and join-gui.cmd's
-functions through `powershell.exe` (elsewhere those skip). The test that compares the version and
+join.py against fake Steam trees and game folders; in WSL also join.cmd's functions (console
+and window, no window shown) through `powershell.exe`, and its batch part's choice of window or
+console through `cmd.exe` (elsewhere those skip). The test that compares the version and
 URL with the server's runs only inside the server's repository.

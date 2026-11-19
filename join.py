@@ -4,7 +4,7 @@
 # The Linux counterpart of join.cmd: run it (python3 join.py). It asks for
 #   - the game folder (the last one is the default),
 #   - the server (arrow keys and Enter; the servers joined before by name and address, the most
-#     recently used on top, the last entry asks for another address),
+#     recently used on top, on the first start roe-os.de; the last entry asks for another address),
 #   - the account to play with (arrow keys and Enter; the most recently used on top, the last
 #     entry creates a new one),
 # then logs in to the server and starts the game with Proton. Answers are remembered in
@@ -75,7 +75,7 @@ from pathlib import Path
 
 # This script's version; the server can ask for a newer one (VERSION). The same number as join.cmd's
 # and roe_server's (src/lobby/accounts.hpp kJoinScriptVersion).
-JOIN_VERSION = '0.9'
+JOIN_VERSION = '1.0'
 JOIN_URL = 'https://github.com/mschnati/roe-os-client'
 EXPECTED_SHA = {'2dca9b1e122e21363e14eeeb2372598c773205a907ed8d2b2d54a7229ad6ba18',   # root folder (DX11)
                 'e076dddcab4b48d52b920a84bbee125c8b452900ae90cea2f190f2e3654ff81d'}   # XVersion (DX12)
@@ -928,6 +928,15 @@ def saved_servers(settings):
     return sorted(found.values(), key=lambda s: -s['last_used'])
 
 
+# The servers a first start offers (none saved yet), so a new player only picks one and plays.
+DEFAULT_SERVERS = [{'address': 'roe-os.de', 'name': 'ROE-OS'}]
+
+
+def offered_servers(settings):
+    """The servers to offer: the saved ones, else DEFAULT_SERVERS."""
+    return saved_servers(settings) or [dict(s, last_used=0) for s in DEFAULT_SERVERS]
+
+
 def remember_server(servers, address, now=None):
     """The list with address used now, on top (its saved name kept)."""
     key = server_folder_name(address)
@@ -1468,7 +1477,7 @@ def backup_command(options, settings, root=None, question=ask):
 
 def admin_command(options, settings, opener=None):
     """--admin: the server and the account as for a join, then the browser at the admin page."""
-    servers = saved_servers(settings)
+    servers = offered_servers(settings)
     server = choose_server(servers, options.server).strip()
     if not server:
         raise Failure('A server address is needed.')
@@ -1542,7 +1551,7 @@ def main(argv=None):
         print('Would stop here: ' + message)
 
     # 2. Server and name. The game only connects to lobby port 8001, so a second server needs its own address.
-    servers = saved_servers(settings)
+    servers = offered_servers(settings)
     server = choose_server(servers, options.server).strip()
     if not server:
         raise Failure('A server address is needed.')

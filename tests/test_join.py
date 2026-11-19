@@ -669,6 +669,18 @@ class ServerMenu(unittest.TestCase):
         join.save_accounts(self.root / 'old.example', [{'name': 'A', 'token': T1, 'last_used': 50}])
         self.assertEqual(join.saved_servers({}), [])
 
+    def test_default_servers(self):
+        # The first start offers roe-os.de (Enter takes it); saved servers replace the list; joining
+        # another server keeps it.
+        offered = join.offered_servers({})
+        self.assertEqual(offered, [{'address': 'roe-os.de', 'name': 'ROE-OS', 'last_used': 0}])
+        shown = []
+        self.assertEqual(join.choose_server(offered, choose=lambda entries: shown.append(entries) or 0, question=Answers()), 'roe-os.de')
+        self.assertEqual(shown, [['ROE-OS (roe-os.de)', 'Enter another server (IP or domain)']])
+        self.assertEqual([s['address'] for s in join.remember_server(offered, 'b.example', now=5)], ['b.example', 'roe-os.de'])
+        self.assertEqual(join.offered_servers({'servers': [{'address': 'a.example', 'last_used': 1}]}), [{'address': 'a.example', 'last_used': 1}])
+        self.assertEqual(join.DEFAULT_SERVERS, [{'address': 'roe-os.de', 'name': 'ROE-OS'}])   # offered_servers copies
+
     def test_server_option_and_first_start(self):
         servers = [{'address': 'a.example', 'last_used': 1}]
         no_menu = lambda entries: self.fail('menu shown')   # noqa: E731
@@ -835,7 +847,7 @@ class JoinCmdAccounts(unittest.TestCase):
 class JoinCmdServers(unittest.TestCase):
     """join.cmd's server menu, the servers list and -Server (through powershell.exe)."""
     def test_functions(self):
-        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 47)
+        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 50)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
@@ -949,12 +961,52 @@ class JoinCmdVoice(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinGui(unittest.TestCase):
-    """join-gui.cmd loads join.cmd, its windows parse, its worker and its server and play steps (no window shown)."""
+    """join.cmd's window: its code loads, its windows parse, its worker and its server and play steps (no window shown)."""
     def test_functions(self):
         def prepare(base):
-            shutil.copyfile(JOIN.parent / 'join-gui.cmd', base / 'join-gui.cmd')
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 35)
+        run_powershell(self, 'join_gui.ps1', prepare, 36)
+
+
+@unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
+class JoinCmdStart(unittest.TestCase):
+    """join.cmd's batch part: the window for a double-click (cmd.exe /c, no arguments) or --window,
+    the console with arguments, --console or typed in a prompt; join-gui.cmd forwards to the window."""
+    def run_batch(self, base, line):
+        # The line typed into a command prompt (cmd.exe without /c); cmd /c ""<file>" " is how
+        # Explorer starts a double-clicked file.
+        result = subprocess.run(['cmd.exe'], cwd=str(base), input=line + '\r\nexit\r\n', capture_output=True, text=True, timeout=30)
+        return [line.strip() for line in result.stdout.splitlines() if line.strip().startswith('MODE ')]
+
+    def test_window_or_console(self):
+        temp = subprocess.run(['cmd.exe', '/c', 'echo %TEMP%'], cwd='/mnt/c', capture_output=True, text=True).stdout.strip()
+        temp = subprocess.run(['wslpath', '-u', temp], capture_output=True, text=True).stdout.strip()
+        if not temp or not Path(temp).is_dir():
+            self.skipTest('no Windows temp folder')
+        batch = (JOIN.parent / 'join.cmd').read_text().split('#>')[0]
+        # The two PowerShell starts print what they would start instead.
+        window = 'start "" /min powershell.exe '
+        console = '\npowershell.exe '
+        self.assertEqual((batch.count(window), batch.count(console)), (1, 1))
+        batch = batch.replace(window, 'echo MODE window & rem ').replace(console, '\necho MODE console [%ROE_JOIN_ARGS%] & rem ')
+        with tempfile.TemporaryDirectory(dir=temp) as tmp:
+            base = Path(tmp) / 'a b!c'
+            base.mkdir()
+            (base / 'join.cmd').write_text(batch.replace('\n', '\r\n'), newline='')
+            path = subprocess.run(['wslpath', '-w', str(base / 'join.cmd')], capture_output=True, text=True, check=True).stdout.strip()
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" "'), ['MODE window'])
+            self.assertEqual(self.run_batch(base, f'cmd /C ""{path}""'), ['MODE window'])
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window"'), ['MODE window'])
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --console"'), ['MODE console [--console]'])
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" -Server roe-os.de -Name "Anna Lee""'), ['MODE console [-Server roe-os.de -Name "Anna Lee"]'])
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" firewall"'), ['MODE console [firewall]'])
+            # Typed in the prompt: the console, also without arguments.
+            self.assertEqual(self.run_batch(base, f'"{path}"'), ['MODE console []'])
+            self.assertEqual(self.run_batch(base, f'"{path}" export'), ['MODE console [export]'])
+            self.assertEqual(self.run_batch(base, f'"{path}" --window'), ['MODE window'])
+            # join-gui.cmd (kept for one version) starts the window.
+            shutil.copyfile(JOIN.parent / 'join-gui.cmd', base / 'join-gui.cmd')
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path[:-len("join.cmd")]}join-gui.cmd" "'), ['MODE window'])
 
 
 if __name__ == '__main__':
