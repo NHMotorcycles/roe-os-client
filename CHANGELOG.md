@@ -16,7 +16,8 @@ repository, which keeps their history).
 - join.cmd (Windows console) and join.py (Linux, Steam with Proton or GE-Proton): game folder and
   version check, the servers joined before, accounts with a secret key per account
   (`%APPDATA%\roe-join`, `~/.config/roe-join`), export and import of every account into one file,
-  the server's name and players per region, a version check against the server.
+  the server's name and players per region (every region with its numbers after the login and
+  every 30 s while the game runs), a version check against the server.
 - join.cmd's firewall rules: the game may reach only the servers joined and the addresses the
   server lists, with a check that the rules are there and that no block rule of another program
   names the game.

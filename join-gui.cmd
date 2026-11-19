@@ -138,7 +138,9 @@ function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [strin
     if ($login.Accounts) {
         $info = $null
         try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
-        if ($info -match '^OK ') { Send-GuiEvent 'stats' (Format-ServerInfo $info) }
+        $stats = $null
+        try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+        if ($info -match '^OK ') { Send-GuiEvent 'stats' ((Format-ServerNow $info $stats) -replace ' \| ', "`n") }
     }
     $game = Start-Game $client $login.Uid $serverIp $voicePick
     Send-GuiEvent 'game' $true
@@ -148,7 +150,9 @@ function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [strin
             if (-not $login.Accounts) { continue }
             $info = $null
             try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
-            if ($info -match '^OK ') { Send-GuiEvent 'stats' ("[{0:HH:mm}] {1}" -f (Get-Date), (Format-ServerInfo $info)) }
+            $stats = $null
+            try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+            if ($info -match '^OK ') { Send-GuiEvent 'stats' ("[{0:HH:mm}] {1}" -f (Get-Date), ((Format-ServerNow $info $stats) -replace ' \| ', "`n")) }
         }
     } finally {
         if ($game.VoiceOn) { Restore-Voice $client 15 | Out-Null }
@@ -374,7 +378,7 @@ function Receive-GuiEvents {
                 'game' {
                     $gui.GameRunning = $true
                     Update-Controls
-                    Add-Line 'Game running. In the game: Play > Matchmaking > Start Matchmaking (Play > Training for bots). This window puts the original voice DLL back when the game exits.'
+                    Add-Line 'Game running. This window puts the original voice DLL back when the game exits.'
                 }
                 'done' { Complete-Work $item.Data }
             }

@@ -105,6 +105,11 @@ Check 'bad url replaced' ($stop -like '*from https://github.com/mschnati/roe-os-
 Check 'region stats' ((Format-Stats 'OK 7,normal,12,3,2,EU%20SERVER 6,duel,2,0,1,AS%20SERVER,later 5,normal,x,0,0,NA%20SERVER 9,odd') -ceq 'EU (normal): 12 online, 3 searching, 2 matches | AS (duel): 2 online, 0 searching, 1 match')
 Check 'region without a name' ((Format-Stats 'OK 5,normal,0,0,0,%0A') -ceq 'zone 5 (normal): 0 online, 0 searching, 0 matches')
 Check 'older server shows nothing' ((Format-Stats 'OK') -eq '' -and (Format-Stats 'INVALID') -eq '' -and (Format-Stats 'LIMIT') -eq '' -and (Format-Stats $null) -eq '')
+# The line after the login and while the game runs: every region (the live server's reply), INFO only without STATS.
+$live = 'OK 7,normal,0,0,0,EU%20SERVER 6,duel,0,0,0,AS%20SERVER'
+Check 'now: every region' ((Format-ServerNow 'OK players=0 matches=0 waiting=0 restarting=0 name=ROE-OS' $live) -ceq 'On the server now: EU (normal): 0 online, 0 searching, 0 matches | AS (duel): 0 online, 0 searching, 0 matches.')
+Check 'now: restart notice' ((Format-ServerNow 'OK players=1 restarting=1' $live) -like '*0 matches. It restarts for an update soon*')
+Check 'now: older server' ((Format-ServerNow 'OK players=2 matches=1 waiting=0 restarting=0' 'INVALID') -like 'On the server now: 2 players online, 1 match running*' -and (Format-ServerNow 'OK players=2' $null) -like 'On the server now: 2 players*')
 
 # The steps of a join as functions (join.cmd and join-gui.cmd): the host, the addresses, the folder.
 $stop = ''

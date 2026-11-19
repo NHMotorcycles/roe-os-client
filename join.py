@@ -1240,6 +1240,19 @@ def format_stats(reply):
     return ' | '.join(parts)
 
 
+def server_now(info, stats):
+    """What runs on the server now, for the line after the login and while the game runs: every
+    region with its numbers (STATS), the INFO line only from a server without STATS; INFO's
+    restart notice either way."""
+    regions = format_stats(stats)
+    if not regions:
+        return server_info(info)
+    text = f'On the server now: {regions}.'
+    if re.search(r'(^| )restarting=[1-9]', info or ''):
+        text += ' It restarts for an update soon; new searches are refused until then.'
+    return text
+
+
 def server_info(reply):
     """The account service's INFO answer as one line for the player."""
     values, queues = {}, []
@@ -1483,6 +1496,13 @@ def main(argv=None):
 
     def request(line):
         return account(ip, account_port, folder, line)
+
+    def stats():
+        # STATS for the line of what runs now; None when it fails (an older server, a timeout).
+        try:
+            return request('STATS')
+        except Exception:
+            return None
     if options.dry_run:
         entry = choose_account(accounts, options.name)
         who = entry['name'] if entry else options.name or 'a new account'
@@ -1522,7 +1542,7 @@ def main(argv=None):
         except Exception:
             info = None
         if info and info.startswith('OK '):
-            print(server_info(info))
+            print(server_now(info, stats()))
         width = [0]
 
         def watch():
@@ -1532,7 +1552,7 @@ def main(argv=None):
             except Exception:
                 return
             if info and info.startswith('OK '):
-                text = time.strftime('[%H:%M] ') + server_info(info)
+                text = time.strftime('[%H:%M] ') + server_now(info, stats())
                 if not width[0]:
                     print()  # set apart from the lines above
                 color, reset = ('\033[36m', '\033[0m') if sys.stdout.isatty() else ('', '')
@@ -1542,7 +1562,7 @@ def main(argv=None):
     # 4. The game.
     print()
     if not options.dry_run:
-        print('Starting the game. In the game: close the Event Center, then Play -> Training -> Start Matchmaking.')
+        print('Starting the game.')
     result = play(client, ['-language=en', '-garena', f'-uid={uid}', f'-server={ip}:{lobby_port}'], options,
                   None if options.dry_run else watch, dll=dll, expected=expected)
     return 1 if problems else result

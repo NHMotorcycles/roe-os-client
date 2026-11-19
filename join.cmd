@@ -1232,6 +1232,16 @@ function Resolve-ServerIps([string]$HostName) {
     if (-not $ips.Count) { throw "Cannot resolve $HostName to an IPv4 address." }
     return ,[string[]]$ips
 }
+# What runs on the server now, for the line after the login and while the game runs: every
+# region with its numbers (STATS), the INFO line only from a server without STATS; INFO's
+# restart notice either way.
+function Format-ServerNow([string]$Info, [string]$Stats) {
+    $regions = Format-Stats $Stats
+    if (-not $regions) { return Format-ServerInfo $Info }
+    $text = "On the server now: $regions."
+    if ($Info -match '(^| )restarting=[1-9]') { $text += ' It restarts for an update soon; new searches are refused until then.' }
+    return $text
+}
 # Where a server's accounts and certificate pin are kept.
 function Get-AccountFolder([string]$Server) { return Join-Path $joinRoot (Get-ServerFolderName $Server) }
 # The server's name (INFO), whether this script is new enough (VERSION: TooOld the reason to stop,
@@ -1377,8 +1387,7 @@ function Connect-Account([string]$Ip, [string]$Folder, $Accounts, $Entry, [strin
 # to the server. Returns Process and VoiceOn: when true, Restore-Voice once the game exits.
 function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
     Write-Host ''
-    Write-Host 'Starting the game. In the game: To play vs Bots hit, Play -> Training -> Start Matchmaking.'
-    Write-Host 'To play vs Players hit, Play -> Matchmaking -> Start Matchmaking.'
+    Write-Host 'Starting the game.'
     $voiceOn = $false
     if ($VoicePick -and $VoicePick.Hash) { $voiceOn = Install-Voice $Client $VoicePick.Dll $VoicePick.Hash }
     try {
@@ -1523,7 +1532,9 @@ try {
     if ($login.Accounts) {
         $info = $null
         try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
-        if ($info -match '^OK ') { Write-Host (Format-ServerInfo $info) }
+        $stats = $null
+        try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+        if ($info -match '^OK ') { Write-Host (Format-ServerNow $info $stats) }
     }
 
     # 5. The game.
@@ -1537,7 +1548,9 @@ try {
             $info = $null
             try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
             if ($info -notmatch '^OK ') { continue }
-            $line = Format-ServerInfo $info
+            $stats = $null
+            try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+            $line = Format-ServerNow $info $stats
             try { $Host.UI.RawUI.WindowTitle = "Ring of Elysium: $line" } catch { }
             $text = "[{0:HH:mm}] {1}" -f (Get-Date), $line
             if (-not $width) { Write-Host '' }  # set apart from the lines above
