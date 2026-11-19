@@ -126,6 +126,11 @@ function Invoke-Account([string]$Ip, [string]$Folder, [string]$Line) { [void]$gl
 $global:Replies = @{ 'INFO' = 'OK players=1 name=Europa%20One'; 'VERSION' = "OK min=0 current=0.9 $github"; 'ADDRESSES' = 'OK 203.0.113.5 198.51.100.7'; 'STATS' = 'OK 7,normal,1,0,0,EU' }
 $c = Connect-Server '203.0.113.5' $root @('203.0.113.5')
 Check 'contact' ($c.Name -eq 'Europa One' -and -not $c.TooOld -and $null -eq $c.Notice -and (@($c.Listed) -join ',') -eq '198.51.100.7' -and $c.Regions -like 'EU (normal): 1 online*')
+# STATS again within 10 s: the last answer, not a new request.
+$global:Sent.Clear()
+$c = Connect-Server '203.0.113.5' $root @('203.0.113.5')
+Check 'stats at most every 10 s' ($global:Sent -notcontains 'STATS' -and $c.Regions -like 'EU (normal): 1 online*')
+$script:statsCache = $null
 $global:Sent.Clear()
 $c = Connect-Server '203.0.113.5' $root @('203.0.113.5') $false 'join-gui.cmd'
 Check 'contact without addresses' ($null -eq $c.Listed -and $global:Sent -notcontains 'ADDRESSES' -and $global:Sent -contains 'STATS')

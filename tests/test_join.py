@@ -811,7 +811,7 @@ class JoinCmdAccounts(unittest.TestCase):
 class JoinCmdServers(unittest.TestCase):
     """join.cmd's server menu, the servers list and -Server (through powershell.exe)."""
     def test_functions(self):
-        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 46)
+        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 47)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')

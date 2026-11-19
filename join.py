@@ -1497,12 +1497,19 @@ def main(argv=None):
     def request(line):
         return account(ip, account_port, folder, line)
 
+    last_stats = {}
+
     def stats():
-        # STATS for the line of what runs now; None when it fails (an older server, a timeout).
+        # STATS for the line of what runs now, at most every 10 s (the server allows more; this
+        # keeps its load low); None when it fails (an older server, a timeout).
+        if last_stats and time.monotonic() - last_stats['at'] < 10:
+            return last_stats['reply']
         try:
-            return request('STATS')
+            reply = request('STATS')
         except Exception:
-            return None
+            reply = None
+        last_stats.update(at=time.monotonic(), reply=reply)
+        return reply
     if options.dry_run:
         entry = choose_account(accounts, options.name)
         who = entry['name'] if entry else options.name or 'a new account'
@@ -1527,7 +1534,7 @@ def main(argv=None):
             print('The game also connects to: ' + ', '.join(extra))
         # Who plays where (counts per region; an older server answers nothing to show).
         try:
-            regions = format_stats(request('STATS'))
+            regions = format_stats(stats())
         except Exception:
             regions = ''
         if regions:

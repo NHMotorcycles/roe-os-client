@@ -7,6 +7,9 @@ CHANGELOG.md.
 
 ## 0.9 (2026-11-19)
 
+- The player counts per region (STATS) are asked at most every 10 seconds per server, to keep
+  the server's load low.
+
 Licensed under GPL-3.0 (`LICENSE`).
 
 The first version in its own repository (before, the files were part of the server's

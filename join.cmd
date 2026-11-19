@@ -834,6 +834,18 @@ function Invoke-Account([string]$Ip, [string]$Folder, [string]$Line) {
         $tcp.Close()
     }
 }
+# STATS at most every 10 s per server (the server allows more; this keeps its load low): a newer
+# call within 10 s gets the answer of the last one.
+$script:statsCache = @{}
+function Get-ServerStats([string]$Ip, [string]$Folder) {
+    $now = [DateTime]::UtcNow
+    if ($null -eq $script:statsCache) { $script:statsCache = @{} }
+    $last = $script:statsCache[$Ip]
+    if ($last -and ($now - $last.At).TotalSeconds -lt 10) { return $last.Reply }
+    $reply = Invoke-Account $Ip $Folder 'STATS'
+    $script:statsCache[$Ip] = @{ At = $now; Reply = $reply }
+    return $reply
+}
 # The answer to STATS as one line, a part per region: "EU (normal): 12 online, 3 searching,
 # 2 matches | AS (duel): ...". Empty from an older server.
 function Format-Stats([string]$Reply) {
@@ -1262,7 +1274,7 @@ function Connect-Server([string]$Ip, [string]$Folder, [string[]]$ServerIps, [boo
         try { $listed = Get-ServerAddresses (Invoke-Account $Ip $Folder 'ADDRESSES') } catch { }
         if ($null -ne $listed) { $result.Listed = [string[]]@($listed | Where-Object { $ServerIps -notcontains $_ }) }
     }
-    try { $result.Regions = Format-Stats (Invoke-Account $Ip $Folder 'STATS') } catch { }
+    try { $result.Regions = Format-Stats (Get-ServerStats $Ip $Folder) } catch { }
     return $result
 }
 # The firewall step (Firewall: the rules on). The game may talk to this computer and to the
@@ -1533,7 +1545,7 @@ try {
         $info = $null
         try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
         $stats = $null
-        try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+        try { $stats = Get-ServerStats $serverIp $folder } catch { }
         if ($info -match '^OK ') { Write-Host (Format-ServerNow $info $stats) }
     }
 
@@ -1549,7 +1561,7 @@ try {
             try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
             if ($info -notmatch '^OK ') { continue }
             $stats = $null
-            try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+            try { $stats = Get-ServerStats $serverIp $folder } catch { }
             $line = Format-ServerNow $info $stats
             try { $Host.UI.RawUI.WindowTitle = "Ring of Elysium: $line" } catch { }
             $text = "[{0:HH:mm}] {1}" -f (Get-Date), $line

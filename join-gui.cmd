@@ -139,7 +139,7 @@ function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [strin
         $info = $null
         try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
         $stats = $null
-        try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+        try { $stats = Get-ServerStats $serverIp $folder } catch { }
         if ($info -match '^OK ') { Send-GuiEvent 'stats' ((Format-ServerNow $info $stats) -replace ' \| ', "`n") }
     }
     $game = Start-Game $client $login.Uid $serverIp $voicePick
@@ -151,7 +151,7 @@ function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [strin
             $info = $null
             try { $info = Invoke-Account $serverIp $folder 'INFO' } catch { }
             $stats = $null
-            try { $stats = Invoke-Account $serverIp $folder 'STATS' } catch { }
+            try { $stats = Get-ServerStats $serverIp $folder } catch { }
             if ($info -match '^OK ') { Send-GuiEvent 'stats' ("[{0:HH:mm}] {1}" -f (Get-Date), ((Format-ServerNow $info $stats) -replace ' \| ', "`n")) }
         }
     } finally {
