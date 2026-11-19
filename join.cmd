@@ -1467,8 +1467,10 @@ function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
 $failed = 'Could not join: '
 try {
     $settings = Read-Settings
-    Restore-AllVoice  # ours left by a crash or a closed window: the original back first
     $arguments = Read-Arguments "$env:ROE_JOIN_ARGS"
+    # Ours left by a crash or a closed window: the original back first. Not for "admin", which
+    # runs next to a game this script started (its join puts the DLL back when the game exits).
+    if ($arguments.Command -ne 'admin') { Restore-AllVoice }
     $command = $arguments.Command
     $givenName = $arguments.Name
     $givenServer = $arguments.Server

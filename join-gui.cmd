@@ -79,11 +79,12 @@ function Get-ErrorMessage($Record) {
     return "$($exception.Message)"
 }
 # Runs one piece of work in the worker and reports it (done: Ok, Result, Message, Details).
-function Invoke-Work([string]$Command, [hashtable]$Arguments) {
+# Event: 'done' for the worker, 'side-done' for the side worker (the admin page).
+function Invoke-Work([string]$Command, [hashtable]$Arguments, [string]$Event = 'done') {
     $done = [pscustomobject]@{ Ok = $true; Result = $null; Message = ''; Details = '' }
     try { $done.Result = & $Command @Arguments }
     catch { $done.Ok = $false; $done.Message = Get-ErrorMessage $_; $done.Details = "$($_ | Out-String)$($_.ScriptStackTrace)".Trim() }
-    Send-GuiEvent 'done' $done
+    Send-GuiEvent $Event $done
 }
 
 # --- Work in the background --------------------------------------------------------------------
@@ -438,6 +439,7 @@ function Receive-GuiEvents {
                     Add-Line 'Game running. This window puts the original voice DLL back when the game exits.'
                 }
                 'done' { Complete-Work $item.Data }
+                'side-done' { Complete-SideWork $item.Data }
             }
         }
     } catch {
@@ -467,6 +469,30 @@ function Start-Work([string]$Command, [hashtable]$Arguments, [scriptblock]$OnDon
     [void]$gui.Queue.Add([pscustomobject]@{ Command = $Command; Arguments = $Arguments; OnDone = $OnDone })
     Start-NextWork
 }
+# Work next to the worker's (which waits for the game while it runs): the admin page. One at a
+# time, in a second runspace made at its first use.
+function Start-SideWork([string]$Command, [hashtable]$Arguments, [scriptblock]$OnDone) {
+    if ($gui.SideJob) { return }
+    if (-not $gui.SideWorker) { $gui.SideWorker = New-Worker $gui.Code }
+    $gui.SideJob = $Command
+    $gui.SideOnDone = $OnDone
+    $gui.SideWorker.Commands.Clear()
+    [void]$gui.SideWorker.AddCommand('Invoke-Work').AddParameter('Command', $Command).AddParameter('Arguments', $Arguments).AddParameter('Event', 'side-done')
+    $gui.SideHandle = $gui.SideWorker.BeginInvoke()
+    Update-Controls
+}
+function Complete-SideWork($Done) {
+    try { [void]$gui.SideWorker.EndInvoke($gui.SideHandle) } catch { }
+    $gui.SideWorker.Streams.ClearStreams()
+    $onDone = $gui.SideOnDone
+    $gui.SideJob = $null
+    $gui.SideOnDone = $null
+    if (-not $Done.Ok -and $Done.Details) { Write-GuiLog $Done.Details }
+    try {
+        if ($onDone) { & $onDone $Done } elseif (-not $Done.Ok) { Add-Line $Done.Message 'error' }
+    } catch { Show-GuiError $_ }
+    Update-Controls
+}
 function Start-NextWork {
     if (-not $gui.Job -and $gui.Queue.Count) {
         $next = $gui.Queue[0]
@@ -494,7 +520,9 @@ function Complete-Work($Done) {
 function Update-Controls {
     $playing = [bool]$gui.Playing
     foreach ($name in @('ServerBox', 'AddServerButton', 'AccountBox', 'BrowseButton', 'Dx12Box', 'VoiceBox', 'VoiceButton', 'FirewallOnButton', 'FirewallOffButton',
-            'FirewallResetButton', 'FirewallShowButton', 'ExportButton', 'ImportButton', 'AdminButton')) { $gui.C[$name].IsEnabled = -not $playing }
+            'FirewallResetButton', 'FirewallShowButton', 'ExportButton', 'ImportButton')) { $gui.C[$name].IsEnabled = -not $playing }
+    # The admin page also while the game runs: it has a worker of its own (Start-SideWork).
+    $gui.C.AdminButton.IsEnabled = -not $gui.SideJob
     $gui.C.PlayButton.IsEnabled = -not $playing
     $gui.C.PlayButton.Content = if ($gui.GameRunning) { 'Game running' } elseif ($playing) { 'Joining...' } else { 'Play' }
 }
@@ -551,9 +579,9 @@ function Update-AdminPanel {
 function Open-GuiAdmin {
     $server = Get-SelectedServer
     $entry = Get-SelectedAccount
-    if (-not $server -or -not $entry -or -not $entry.token) { return }
+    if (-not $server -or -not $entry -or -not $entry.token -or $gui.SideJob) { return }
     Add-Line "Opening the admin page for $($entry.name) ..."
-    Start-Work 'Invoke-AdminJob' @{ Server = $server; Token = "$($entry.token)" } {
+    Start-SideWork 'Invoke-AdminJob' @{ Server = $server; Token = "$($entry.token)" } {
         param($done)
         if ($done.Ok) { Add-Line 'The admin page is open in your browser (its login link works once, for one minute).' } else { Add-Line "Could not open the admin page: $($done.Message)" 'error' }
     }
@@ -797,6 +825,7 @@ function Start-Gui([string]$Code) {
     $gui.Recent = New-Object Collections.ArrayList
     $gui.Queue = New-Object Collections.ArrayList
     $gui.Job = $null; $gui.Playing = $false; $gui.GameRunning = $false; $gui.Updating = $false; $gui.Draining = $false
+    $gui.SideJob = $null; $gui.SideWorker = $null; $gui.Code = $Code
     $gui.Roles = $null; $gui.RolesServer = ''
 
     $gui.Worker = New-Worker $Code

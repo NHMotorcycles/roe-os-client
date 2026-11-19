@@ -50,6 +50,14 @@ foreach ($name in (Get-GuiControlNames)) { $gui.C[$name] = $window.FindName($nam
 Check 'main window' (@($gui.C.Values | Where-Object { $null -eq $_ }).Count -eq 0 -and $gui.C.Count -eq (Get-GuiControlNames).Count)
 $dialog = [Windows.Markup.XamlReader]::Parse((Get-InputXaml))
 Check 'input dialog' ($dialog.FindName('AnswerBox') -and $dialog.FindName('OkButton') -and $dialog.FindName('PromptText'))
+# While the game runs the admin page still opens (its own worker); not twice at once.
+$gui.Playing = $true; $gui.GameRunning = $true; $gui.SideJob = $null
+Update-Controls
+$ok = $gui.C.AdminButton.IsEnabled -and -not $gui.C.PlayButton.IsEnabled -and -not $gui.C.AccountBox.IsEnabled -and "$($gui.C.PlayButton.Content)" -eq 'Game running'
+$gui.SideJob = 'Invoke-AdminJob'
+Update-Controls
+Check 'admin while playing' ($ok -and -not $gui.C.AdminButton.IsEnabled)
+$gui.Playing = $false; $gui.GameRunning = $false; $gui.SideJob = $null
 # The admin page's part: hidden until the selected account is a GM on the selected server.
 Check 'admin part hidden' ("$($gui.C.AdminPanel.Visibility)" -eq 'Collapsed')
 $ga = 'a' * 64; $gb = 'b' * 64
@@ -106,6 +114,12 @@ $handle = $worker.BeginInvoke()
 $done = Next-Event
 [void]$worker.EndInvoke($handle)
 Check 'worker work' ($done.Kind -eq 'done' -and $done.Data.Ok -and $done.Data.Result -eq 'play.example')
+$worker.Commands.Clear()
+[void]$worker.AddCommand('Invoke-Work').AddParameter('Command', 'Get-ServerHost').AddParameter('Arguments', @{ Server = 'play.example:8001' }).AddParameter('Event', 'side-done')
+$handle = $worker.BeginInvoke()
+$done = Next-Event
+[void]$worker.EndInvoke($handle)
+Check 'side worker event' ($done.Kind -eq 'side-done' -and $done.Data.Ok -and $done.Data.Result -eq 'play.example')
 $worker.Commands.Clear()
 [void]$worker.AddCommand('Invoke-Work').AddParameter('Command', 'Get-ServerHost').AddParameter('Arguments', @{ Server = 'play.example:9' })
 $handle = $worker.BeginInvoke()

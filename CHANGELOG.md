@@ -19,6 +19,9 @@ CHANGELOG.md.
   the server's load low.
 - The voice DLL (`voice/GCloudVoice.dll`) is built locally and committed by hand; the GitHub
   Actions workflow no longer runs on push and starts only by hand.
+- join-gui.cmd: **Advanced > Open the admin page** works while the game runs (it has its own
+  worker; before, it was disabled during the game). `join.cmd admin` next to a running game no
+  longer checks the voice DLL first.
 
 Licensed under GPL-3.0 (`LICENSE`).
 

@@ -954,7 +954,7 @@ class JoinGui(unittest.TestCase):
         def prepare(base):
             shutil.copyfile(JOIN.parent / 'join-gui.cmd', base / 'join-gui.cmd')
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 33)
+        run_powershell(self, 'join_gui.ps1', prepare, 35)
 
 
 if __name__ == '__main__':
