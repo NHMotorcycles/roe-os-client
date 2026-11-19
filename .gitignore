@@ -1,0 +1,7 @@
+# Build folders (cmake -S . -B build, or build-*)
+/build/
+/build-*/
+
+# Python caches
+__pycache__/
+*.pyc

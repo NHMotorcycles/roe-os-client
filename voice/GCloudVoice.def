@@ -1,0 +1,16 @@
+; Exactly what the 2022 client (Europa_Client.exe) imports from GCloudVoice.dll.
+LIBRARY GCloudVoice
+EXPORTS
+    GetVoiceEngine=gv_GetVoiceEngine
+    ??0IGCloudVoiceNotify@gcloud_voice@@QEAA@XZ=gv_Notify_ctor
+    ??1IGCloudVoiceNotify@gcloud_voice@@UEAA@XZ=gv_Notify_dtor
+    ?OnMemberVoice@IGCloudVoiceNotify@gcloud_voice@@UEAAXPEBDPEBIH@Z=gv_OnMemberVoice
+    ?OnUploadFile@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@PEBD1@Z=gv_OnUploadFile
+    ?OnDownloadFile@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@PEBD1@Z=gv_OnDownloadFile
+    ?OnPlayRecordedFile@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@PEBD@Z=gv_OnPlayRecordedFile
+    ?OnApplyMessageKey@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@@Z=gv_OnApplyMessageKey
+    ?OnSpeechToText@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@PEBD1@Z=gv_OnSpeechToText
+    ?OnRecording@IGCloudVoiceNotify@gcloud_voice@@UEAAXPEBEI@Z=gv_OnRecording
+    ?OnStreamSpeechToText@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@HPEBD1@Z=gv_OnStreamSpeechToText
+    ?OnRoleChanged@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@PEBDHH@Z=gv_OnRoleChanged
+    ?OnDeviceEvent@IGCloudVoiceNotify@gcloud_voice@@UEAAXW4GCloudVoiceCompleteCode@2@HPEBD@Z=gv_OnDeviceEvent

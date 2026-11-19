@@ -1,0 +1,49 @@
+name: ci
+# The client repository's own CI: the join script tests on Linux, and on Windows the voice
+# DLL's tests and, when voice/GCloudVoice.dll is missing or older than the voice sources (or the
+# dependency pins), a new GCloudVoice.dll, committed on main so players download it from here.
+on:
+  push:
+    paths-ignore: ['**.md']
+  pull_request:
+    paths-ignore: ['**.md']
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scripts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      # join.py against fake Steam trees (join.cmd's PowerShell harnesses need WSL; they skip here).
+      - run: python3 -B -m unittest discover -s tests -p 'test_join.py' -v
+  windows:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the voice step compares commit times
+      - id: voice
+        shell: bash
+        run: |
+          dll=voice/GCloudVoice.dll
+          sources=$(git log -1 --format=%ct -- voice cmake CMakeLists.txt ":(exclude)$dll")
+          built=$(git log -1 --format=%ct -- "$dll")
+          if [ -f "$dll" ] && [ -n "$built" ] && [ "$built" -ge "$sources" ]; then echo "build=OFF" >> "$GITHUB_OUTPUT"; echo "$dll is current"
+          else echo "build=ON" >> "$GITHUB_OUTPUT"; fi
+      # The voice core's tests always; the DLL and its test only when it is built.
+      - run: cmake --preset windows-release -DROE_BUILD_VOICE_DLL=${{ steps.voice.outputs.build }}
+      - run: cmake --build --preset windows-release
+      - run: ctest --preset windows-release
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.voice.outputs.build == 'ON'
+        shell: bash
+        run: |
+          dll=voice/GCloudVoice.dll
+          cp build/windows-release/bin/RelWithDebInfo/GCloudVoice.dll "$dll"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$dll"
+          git commit -m "voice: GCloudVoice.dll built from ${GITHUB_SHA::7}"
+          git pull --rebase origin main && git push origin HEAD:main
