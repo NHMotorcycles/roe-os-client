@@ -1,100 +1,72 @@
-# Ring of Elysium Open Source Client
+# ROE-OS Client
 
-The player side of [roe_server](https://github.com/mschnati/ring-of-elysium-open-source), a new server for Ring of Elysium's last version (the 2022 client, build 2022-0.2.989.0): the scripts that start the game and connect it to a server, and the replacement voice chat DLL.
+Play **Ring of Elysium** (the last version, from 2022) on community servers, with no closed
+source launcher. Everything here is plain, readable scripts: open them, or paste them into any AI
+and ask what they do.
 
-It is an unofficial fan project. It contains no game files: you need your own installation of Ring of Elysium (the Steam version). Nothing in the game folder is changed, except our GCloudVoice.dll while the game runs (see Voice chat).
+## :video_game: How to play (Windows)
 
-| File | What it is |
-|---|---|
-| [join-gui.cmd](join-gui.cmd) | Windows: join a server in a window (uses join.cmd, keep both in one folder) |
-| [join.cmd](join.cmd) | Windows: the same in a console, with commands and options |
-| [join.py](join.py) | Linux (Steam with Proton or GE-Proton) |
-| [voice/GCloudVoice.dll](voice/GCloudVoice.dll) | voice chat for the game, built from [voice/](voice) |
+**You need:** Ring of Elysium from Steam, and these two files in **one folder** (anywhere, e.g.
+your desktop). Open each link and click the download arrow at the top right ("Download raw file"):
 
-Every change is listed in [CHANGELOG.md](CHANGELOG.md).
+- [join-gui.cmd](https://github.com/mschnati/roe-os-client/blob/main/join-gui.cmd): the window you start
+- [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd): does the work, keep it next to it
+- Optional, for voice chat: [GCloudVoice.dll](https://github.com/mschnati/roe-os-client/raw/main/voice/GCloudVoice.dll), same folder
 
-## Play on someone's server
+**Then:**
 
-You need:
+1. Double-click **join-gui.cmd**. If Windows warns you: **More info > Run anyway**.
+2. **Add server** and enter the address you got, e.g. **roe-os.de**. You see how many people
+   play in each region.
+3. **Create a new account** (first time) or pick yours.
+4. **Game folder:** click **Browse** and pick the Ring of Elysium folder, usually
+   `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium` (or its `XVersion` folder for
+   DX12).
+5. Click **Play**. The first time, Windows asks for administrator approval for the firewall
+   rules: click **Yes**. Leave the window open while you play.
 
-1. **Ring of Elysium**, installed through Steam (the last version from 2022).
-2. **[join-gui.cmd](https://github.com/mschnati/roe-os-client/blob/main/join-gui.cmd)** and **[join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd)**: open each link, then on the top right click the down arrow with "Download raw file". Save both into the same folder, anywhere on your PC. They start the game and connect it to a server: join-gui.cmd in a window, join.cmd in a console (join-gui.cmd uses join.cmd for the work, so it needs it next to it).
+Everything is saved, so next time it's just **Play**.
 
-**The easy way: join-gui.cmd.** Double-click it. If Windows shows "Windows protected your PC", click "More info", then "Run anyway". A window opens:
+## :bust_in_silhouette: Your account
 
-- **Server**: "Add server..." and the IP address or domain the host gave you. The servers you joined stay in the list (the last one used on top), with how many play in each region.
-- **Account**: the first time "Create a new account" (you pick the name in the game, or the window asks for it); later your accounts on that server.
-- **Game folder**: "Browse..." to the Ring of Elysium folder, usually `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium` (DX11) or its `XVersion` folder (DX12).
-- **Voice chat**: on by default. It needs our GCloudVoice.dll (a separate download, see below): put it next to join-gui.cmd or into a `voice` folder there, or pick its folder with "Choose folder...".
-- **Play**. The first time it asks whether to add the firewall rules (see below; Windows then asks for administrator approval). The window shows "Game running" until the game exits and then puts the game's own voice DLL back, so leave it open while you play. In the game: click **Play, Training, Start Matchmaking**.
+- **Name:** a new account gets a name like `newaccount1234`. You choose your real name in the
+  game, and you can change it there later.
+- **It's yours:** your account is tied to a secret key saved on your PC. Nobody else can log in
+  as you, and there is no password to forget. Don't share it.
+- **Another PC:** in the window, **Advanced > Export accounts**, copy the file over, then
+  **Import accounts** there.
+- **Lost your key?** Ask the server's host to reset your name.
 
-When something goes wrong the window says what to do; "Details" shows every step, and "Advanced" has the firewall rules (on, off, reset, show), the account backup (export, import) and the log (`%APPDATA%\roe-join\gui.log`). join-gui.cmd and join.cmd share their settings and accounts, and do the same steps described below.
+## :microphone2: Voice chat
 
-**The console version: join.cmd**, for advanced users (with the commands and options below):
+On by default, if **GCloudVoice.dll** is next to join-gui.cmd (or you pick its folder). The game's
+own voice servers are gone; this DLL replaces them. It's only put into the game folder while you
+play: the game's original file is saved and put back when the game closes.
 
-1. Double-click `join.cmd`. If Windows shows "Windows protected your PC", click "More info", then "Run anyway".
-2. It asks two questions. Your answers are remembered: next time press Enter to keep them, or pick from the list.
-   - **Game folder**: where Ring of Elysium is installed, usually `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium` for the DX11 version or `C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\XVersion` for the DX12 version.
-   - **Server address**: the IP address or domain the host gave you (a domain is kept as you typed it and looked up again at every join). Later starts show the servers you joined before (the last one used on top): choose one with the arrow keys and Enter, or "Enter another server (IP or domain)" at the bottom. `join.cmd -Server <address>` skips the list.
+**Don't** copy the DLL into the game folder yourself.
 
-   The first time on a server it creates your account. If the server lets you create your character in the game, you pick your name there; otherwise join.cmd asks for the name you want to play under. Later starts show your accounts on that server (the last one used on top, each under its current name): choose one with the arrow keys and Enter, or "Create a new account" at the bottom. `join.cmd -Name <name>` skips the list: it uses your account of that name, or creates one with it.
-3. Windows asks for administrator approval once (and again when you join another server).
-4. The game starts. In the game: click **Play, Training, Start Matchmaking**.
+## :shield: Firewall
 
-What join.cmd does:
+The script adds Windows Firewall rules so the game can only talk to the servers you joined and
+your own PC, nothing else on the internet. That's why it asks for administrator approval.
 
-- It checks that your game is the right version.
-- If you want (it asks once), it adds Windows Firewall rules so the game can only talk to the servers you joined and to your own computer, nothing else on the internet. The server also tells join.cmd every other address its matches use, and the rules follow that list at each join. This is what needs the administrator approval, only when the allowed addresses change. To see the rules and the servers they allow, open a command prompt in the folder of join.cmd and run `join.cmd firewall`; `join.cmd firewall off` removes them and stops adding them, `join.cmd firewall on` turns them back on, and `join.cmd firewall reset` removes all of them (the next join allows only its own server). After that step join.cmd checks that the rules are really there and on, and that no block rule of another program (another launcher, or a "blocked" answer to the Windows Firewall popup) names the game; it removes those with the same approval. If the approval prompt was declined or never appeared (User Account Control off, a standard Windows account) or a policy keeps a block rule, it says so and asks before starting the game: then right-click join.cmd > **Run as administrator** (run that way, it sets the rules without a prompt), or turn the rules off with `join.cmd firewall off`.
-- For a new account the server gives you a secret key, which join.cmd saves on your PC (`%APPDATA%\roe-join\<server>\accounts.json`, with the account's name). Next time it uses the key to log you in, so nobody else can play under your name. To play with the same accounts on another PC, run `join.cmd export` (it writes `roe-join-accounts.json` with every server's accounts, keys and certificates; `join.cmd export D:\file.json` picks the file) and `join.cmd import <file>` on the other PC: it adds the accounts it does not have, keeps the more recently used one of an account on both, and asks before taking another certificate for a server. The file holds your keys: keep it private and delete it afterwards.
-- Voice chat is on by default: on the first start join.cmd asks once "Use voice chat? (y/n)" (Enter: yes). It needs our [GCloudVoice.dll](https://github.com/mschnati/roe-os-client/raw/main/voice/GCloudVoice.dll), a separate download: put it into a folder `voice` next to join.cmd (the server package has the same folder), or anywhere else and enter that folder when join.cmd asks for it. Once found, join.cmd remembers the DLL's path and uses it at every start without asking; only when that file is gone it asks for the folder again. Enter without a folder starts without voice this time (after the first yes, the question comes again next start). A no is remembered too. join.cmd puts that `GCloudVoice.dll` into the game folder you start while the game runs. The original is saved in the folder `roe-join-backup` inside the game folder (with a README.txt; to put it back by hand, copy its `GCloudVoice.dll` into the game folder) and put back when the game exits; after a crash or a closed window, the next start puts it back first, also when the game's DLL was deleted. A game that runs already is never changed. It never uses the game's own GCloudVoice.dll. `join.cmd voice off` turns voice chat off, `join.cmd voice on` back on and asks for the DLL's folder again (Enter keeps it). If join.cmd says it could not put the original back, close the game and start join.cmd again, or in Steam: Ring of Elysium > Properties > Installed Files > Verify integrity of game files.
-- It starts the game, connected to the server.
+**Game can't connect?** Right-click **join-gui.cmd > Run as administrator** and try again. If it
+still fails, the window tells you why under **Details**.
 
-If join.cmd says the name is taken, pick another one. If you lost your key, ask the host to reset your name.
+## :penguin: Linux
 
-**On Linux** (Steam with Proton or GE-Proton): download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) the same way and run `python3 join.py` in a terminal (it needs python3, nothing else). It asks the same questions, finds the game in any Steam library (also Flatpak and Snap Steam) and starts it with the Proton that last ran the game, else the newest GE-Proton, else the newest Proton from Steam. `python3 join.py --proton /path/to/proton` (or `PROTON=...`) picks another one; `--game` answers the game question up front, `--server` skips the server list as `-Server` does, `--name` picks the account as `-Name` does; `--voice on|off` turns voice chat on or off (as on Windows, with the backup in `roe-join-backup` in the game folder; `--voice on` also asks for the DLL's folder again); `--dry-run` only shows what it would do; `--help` lists the rest. If it finds no Proton, install GE-Proton (for example with ProtonUp-Qt) or any Proton in Steam. The server and account lists work as on Windows (arrow keys and Enter; a numbered list when the input is not a terminal). Your keys are kept in `~/.config/roe-join`, the same files as `%APPDATA%\roe-join` on Windows, so you can copy them between the two; `--export [FILE]` and `--import FILE` read and write the same backup file as `join.cmd export` and `import`. There is no firewall step on Linux: the game can reach the internet.
+Download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) and run
+`python3 join.py` in a terminal. It finds the game in Steam and starts it with Proton. Same
+servers, accounts and voice chat as on Windows (no firewall step).
 
-## Voice chat
+## More
 
-The game's voice chat (party and squad, and the match's proximity channel) ran over Tencent's
-GVoice servers, which are gone. [voice/GCloudVoice.dll](https://github.com/mschnati/roe-os-client/raw/main/voice/GCloudVoice.dll)
-replaces the game's `GCloudVoice.dll`; join-gui.cmd, join.cmd and join.py put it into the game
-folder while the game runs (they ask once) and put the original back afterwards. It talks to the
-server's voice relay (UDP port 10101). In the game, the voice settings work as before: free talk
-or push-to-talk, channel Team or All, volumes. Its log is `GCloudVoice.log` next to the DLL in the
-game folder. The protocol between the DLL and the relay:
-[docs/VOICE-PROTOCOL.md](https://github.com/mschnati/ring-of-elysium-open-source/blob/main/docs/VOICE-PROTOCOL.md)
-in the server's repository.
+- **Console version:** [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd) works
+  on its own too, with commands and options for advanced users.
+- **Details, building and testing:** [DEVELOPMENT.md](DEVELOPMENT.md)
+- **Changes:** [CHANGELOG.md](CHANGELOG.md)
+- **The server:** [ring-of-elysium-open-source](https://github.com/mschnati/ring-of-elysium-open-source)
 
-## Build the voice DLL
-
-On Windows with Visual Studio 2022 (the C++ tools), from this folder:
-
-```bat
-cmake --preset windows-release
-cmake --build --preset windows-release
-ctest --preset windows-release
-```
-
-`build\windows-release\bin\RelWithDebInfo\GCloudVoice.dll` is the DLL. CMake fetches its
-dependencies itself (Opus 1.5.2, GoogleTest for the tests). The DLL's own test (`Voice.Dll`) drives
-it the way the game does against a fake relay; `roe_voice_tests` tests the platform-independent
-core (`voice/core`: protocol, jitter buffer, mixing, the client state machine), also on Linux
-(`cmake --preset linux-debug`). The CI here builds a new DLL when the voice sources change and
-commits it as `voice/GCloudVoice.dll`.
-
-The server's repository has this folder as `client/` and builds its voice relay with
-`voice/core` from here, so the protocol code exists once.
-
-## Tests of the join scripts
-
-```sh
-python3 -m unittest discover -s tests -p test_join.py
-```
-
-join.py against fake Steam trees and game folders; in WSL also join.cmd's and join-gui.cmd's
-functions through `powershell.exe` (elsewhere those skip). The test that compares the version and
-URL with the server's runs only inside the server's repository.
-
-## Third-party code
-
-License: GPL-3.0 ([LICENSE](LICENSE)). The voice DLL contains Opus (BSD, [third_party/LICENSE.opus](third_party/LICENSE.opus)).
+An unofficial fan project. It contains no game files and changes nothing in your game folder
+except the voice DLL while you play. License: GPL-3.0 ([LICENSE](LICENSE)); the voice DLL
+contains Opus (BSD, [third_party/LICENSE.opus](third_party/LICENSE.opus)).
