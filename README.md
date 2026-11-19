@@ -97,4 +97,4 @@ URL with the server's runs only inside the server's repository.
 
 ## Third-party code
 
-The voice DLL contains Opus (BSD, [third_party/LICENSE.opus](third_party/LICENSE.opus)).
+License: GPL-3.0 ([LICENSE](LICENSE)). The voice DLL contains Opus (BSD, [third_party/LICENSE.opus](third_party/LICENSE.opus)).

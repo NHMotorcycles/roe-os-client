@@ -7,6 +7,8 @@ CHANGELOG.md.
 
 ## 0.9 (2026-11-19)
 
+Licensed under GPL-3.0 (`LICENSE`).
+
 The first version in its own repository (before, the files were part of the server's
 repository, which keeps their history).
 
