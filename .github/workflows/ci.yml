@@ -1,12 +1,13 @@
 name: ci
+# Runs only when started by hand (Actions tab, "Run workflow"): the Actions minutes were used up
+# on 2026-11-19. The voice DLL is built locally (tools/build_windows.sh in the server repository,
+# or cmake --preset windows-release here) and committed into this repository.
 # The client repository's own CI: the join script tests on Linux, and on Windows the voice
 # DLL's tests and, when voice/GCloudVoice.dll is missing or older than the voice sources (or the
-# dependency pins), a new GCloudVoice.dll, committed on main so players download it from here.
+# dependency pins), a new GCloudVoice.dll. Pushes to main committed it; a run started by hand
+# only builds and tests it.
 on:
-  push:
-    paths-ignore: ['**.md']
-  pull_request:
-    paths-ignore: ['**.md']
+  workflow_dispatch:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

@@ -76,7 +76,10 @@ dependencies itself (Opus 1.5.2, GoogleTest for the tests). The DLL's own test (
 it the way the game does against a fake relay; `roe_voice_tests` tests the platform-independent
 core (`voice/core`: protocol, jitter buffer, mixing, the client state machine), also on Linux
 (`cmake --preset linux-debug`). When the voice sources change, build the DLL as above and commit it as
-`voice/GCloudVoice.dll` (the server repository's `tools/build_windows.sh` builds it too).
+`voice/GCloudVoice.dll` (the server repository's `tools/build_windows.sh` builds it too, from WSL;
+the DLL lands next to roe_server.exe). Nothing builds or commits it for you: the GitHub Actions
+workflow runs only when started by hand (Actions tab, "Run workflow"), and such a run only
+builds and tests, it commits nothing.
 
 The server's repository has this folder as `client/` and builds its voice relay with
 `voice/core` from here, so the protocol code exists once.

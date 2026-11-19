@@ -17,6 +17,8 @@ CHANGELOG.md.
   one minute.
 - The player counts per region (STATS) are asked at most every 10 seconds per server, to keep
   the server's load low.
+- The voice DLL (`voice/GCloudVoice.dll`) is built locally and committed by hand; the GitHub
+  Actions workflow no longer runs on push and starts only by hand.
 
 Licensed under GPL-3.0 (`LICENSE`).
 
