@@ -27,6 +27,17 @@ your desktop). Open each link and click the download arrow at the top right ("Do
 
 Everything is saved, so next time it's just **Play**.
 
+> If you have played with other clients before you will likely have to verify your game files on steam as many of them manipulate your game files without telling or asking you.
+
+## :globe_with_meridians: Our Server
+
+### roe-os.de
+- 64 tick with very performant architecture for good hit reg
+- Choose Region Europe for normal matches, on german servers
+- Region Asia for a custom developed **Duel** game mode, on german servers
+- Region America is ready to go online and let you play on NA servers, as soon as it makes sense with the player numbers
+
+
 ## :bust_in_silhouette: Your account
 
 - **Name:** a new account gets a name like `newaccount1234`. You choose your real name in the
@@ -37,7 +48,7 @@ Everything is saved, so next time it's just **Play**.
   **Import accounts** there.
 - **Lost your key?** Ask the server's host to reset your name.
 
-## :microphone2: Voice chat
+## :microphone: Voice chat
 
 On by default, if **GCloudVoice.dll** is next to join-gui.cmd (or you pick its folder). The game's
 own voice servers are gone; this DLL replaces them. It's only put into the game folder while you
@@ -48,10 +59,10 @@ play: the game's original file is saved and put back when the game closes.
 ## :shield: Firewall
 
 The script adds Windows Firewall rules so the game can only talk to the servers you joined and
-your own PC, nothing else on the internet. That's why it asks for administrator approval.
+your own PC, nothing else on the internet. That's why it asks for administrator approval. Else the game will keep sending analytics data to Tencent.
 
 **Game can't connect?** Right-click **join-gui.cmd > Run as administrator** and try again. If it
-still fails, the window tells you why under **Details**.
+still fails, the window tells you why under **Details**. Its probably because another launcher you used set some weird firewall settings.
 
 ## :penguin: Linux
 
