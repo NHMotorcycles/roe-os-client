@@ -3070,6 +3070,41 @@ function Register-SteamHandlers {
     Add-Handler $gui.C.SteamOffButton 'Click' { Set-GuiSteam $true }
     Add-Handler $gui.C.SteamAutoBox 'Click' { if (-not $gui.Updating) { Set-SteamProfile @{ auto_start = [bool]$gui.C.SteamAutoBox.IsChecked } } }
 }
+# The console the window was started from out of sight: cmd.exe's when Steam starts join.cmd and
+# it waits for the window, PowerShell's own after a double-click. A classic console window is
+# hidden. Windows Terminal (the default terminal on Windows 11) only minimizes for that, so there
+# its window is hidden when it holds just this tab; it closes when the tab ends.
+function Hide-ConsoleWindow {
+    try {
+        if (-not ('RoeJoin.ConsoleWindow' -as [type])) {
+            Add-Type -Namespace RoeJoin -Name ConsoleWindow -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+[DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint relation);
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int size);
+'@
+        }
+        $console = [RoeJoin.ConsoleWindow]::GetConsoleWindow()
+        if ($console -eq [IntPtr]::Zero) { return }
+        $window = $console
+        $class = New-Object Text.StringBuilder 256
+        [void][RoeJoin.ConsoleWindow]::GetClassName($console, $class, 256)
+        if ("$class" -eq 'PseudoConsoleWindow') {
+            $terminal = [RoeJoin.ConsoleWindow]::GetWindow($console, 4)  # GW_OWNER: the terminal's window
+            $class = New-Object Text.StringBuilder 256
+            [void][RoeJoin.ConsoleWindow]::GetClassName($terminal, $class, 256)
+            if ("$class" -eq 'CASCADIA_HOSTING_WINDOW_CLASS') {
+                Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+                $tab = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::TabItem)
+                $tabs = [Windows.Automation.AutomationElement]::FromHandle($terminal).FindAll([Windows.Automation.TreeScope]::Descendants, $tab).Count
+                if ($tabs -eq 1) { $window = $terminal }
+            }
+        }
+        [void][RoeJoin.ConsoleWindow]::ShowWindow($window, 0)  # SW_HIDE
+    } catch {
+        Write-GuiLog "join.cmd could not hide its console window: $($_.Exception.Message)"
+    }
+}
 function Start-Gui([string]$Code) {
     $log = Get-GuiLogPath
     if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination ($log -replace '\.log$', '.old.log') -Force }
@@ -3151,6 +3186,7 @@ function Start-Gui([string]$Code) {
 # The window (ROE_JOIN_WINDOW from the batch part: no arguments, or --window).
 if ($env:ROE_JOIN_WINDOW) {
     try {
+        Hide-ConsoleWindow
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
         if (-not $env:ROE_JOIN_SELF) { throw 'Start join.cmd by double-clicking it.' }
         $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]' })

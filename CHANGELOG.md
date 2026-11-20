@@ -5,6 +5,13 @@ scripts' (`$joinVersion` in join.cmd, `JOIN_VERSION` in join.py); a server can a
 one (`roe_server set join-min-version`). The server's own changes are in its repository's
 CHANGELOG.md.
 
+## Unreleased
+
+- Started through Steam, no empty console window stays open while the game runs: the window
+  hides the console it was started from (also in Windows Terminal, the default terminal on
+  Windows 11, which before only minimized it, or not at all). Steam still sees the game running
+  until it exits.
+
 ## 1.0 (2026-11-20)
 
 - A region that is down (it takes no new match, the game greys it out) shows as offline: the

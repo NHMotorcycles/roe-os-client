@@ -14,7 +14,9 @@ share the settings, accounts and keys. Its batch part decides:
   forces it. The window runs in a hidden PowerShell (`-WindowStyle Hidden -STA`), so no console
   stays open. `--window` with more after it (Steam's launch option `"<join.cmd>" --window
   %command%`) is the window too, and then the batch part waits for it instead of `start`ing it,
-  so the process Steam started lives as long as the game.
+  so the process Steam started lives as long as the game. The window hides the console it was
+  started from (cmd.exe's in that case); in Windows Terminal, which only minimizes for that, it
+  hides the terminal window when that holds just this tab.
 - **The console** with any argument (`-Server`, `-Name`, `firewall`, `voice`, `export`,
   `import`, `admin`), or typed in a command prompt without arguments. `join.cmd --console`
   forces it, for example from PowerShell.
