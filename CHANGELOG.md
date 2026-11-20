@@ -7,7 +7,13 @@ CHANGELOG.md.
 
 ## Unreleased
 
-- Start through Steam from the window: **Advanced > Set up Start through Steam** puts it into
+- The window's voice chat box (and the box for Steam's auto start) only toggles on a click on the
+  box itself, no longer on its text or the empty space next to it. Space still toggles it.
+- Start through Steam has its own section in the window, **Set up starting through Steam**
+  (folded at first, no longer under **Advanced**). It says what it does and shows the launch
+  option line to paste into Steam by hand (**Copy** button; Steam: Ring of Elysium > Properties >
+  General > Launch options), then the automatic way below.
+- Start through Steam from the window: **Set up Start through Steam** puts it into
   Steam with the server and account selected in the window. If Steam is open, it asks to close it
   and offers to start it again afterwards. Steam's Play button then opens join.cmd's window (no
   console), which starts the game after 3 seconds (Cancel stops it; a box turns that off, then it

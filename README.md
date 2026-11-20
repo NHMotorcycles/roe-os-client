@@ -32,12 +32,17 @@ Everything is saved, so next time it's just **Play**.
 
 Want Steam's **Play** button, overlay and playtime? Play once with join.cmd as above, then:
 
-1. In join.cmd's window, pick the server and account Steam should use, open **Advanced** and
-   click **Set up Start through Steam**.
+1. In join.cmd's window, pick the server and account Steam should use, open **Set up starting
+   through Steam** and click **Set up Start through Steam**.
 2. If Steam is open, join.cmd asks to close it (Steam must be closed for this) and offers to
    start it again when it is done.
 3. Press **Play** in Steam. join.cmd's window opens and starts the game after 3 seconds
    (**Cancel** stops that). It closes itself when the game exits.
+
+By hand instead: the same section shows the launch option line (`"<path>\join.cmd" --window
+%command%`) with a **Copy** button. Paste it in Steam: **Ring of Elysium > Properties > General >
+Launch options** (Steam may stay open for this). Steam's Play then joins the server and account you
+used last.
 
 Another server or account for Steam: select it and click the button again. Wait for **Play**
 instead of starting at once: untick the box below the button. **Turn it off** undoes it. Don't move

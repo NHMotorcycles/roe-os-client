@@ -43,7 +43,8 @@ exit /b !ROE_JOIN_EXIT!
 # servers (on the first start roe-os.de, "Add server..." for another one) and who plays where on
 # the selected one; the accounts on that server ("Create a new account" makes one); the game
 # folder (the Ring of Elysium folder, with a DirectX 12 box for its XVersion folder); voice chat;
-# and Play. Under "Advanced": the firewall rules (on, off, reset, show), the account backup
+# and Play. "Set up starting through Steam": Steam's Play button through the window (below). Under
+# "Advanced": the firewall rules (on, off, reset, show), the account backup
 # (export, import) and the log; for an account with GM rights on the selected server (ROLE) also
 # "Open the admin page" (for others it is not shown; the server checks the rights again).
 #
@@ -114,10 +115,10 @@ exit /b !ROE_JOIN_EXIT!
 # Steam: with the launch option "<this file>" %command% Steam's Play button starts join.cmd with the
 # game's command line; it joins the server and account of join.cmd steam-setup (else the last used
 # ones) and starts the game itself. join.cmd [-Server <address>] [-Name <name>] steam-setup [off]
-# prints the line and sets (or removes) it in Steam while Steam is closed. The window's Advanced >
-# Start through Steam sets "<this file>" --window %command% instead (closing Steam first when the
-# player agrees): Steam's Play button then opens the window, which joins the server and account
-# saved there and closes itself when the game exits.
+# prints the line and sets (or removes) it in Steam while Steam is closed. The window's section
+# "Set up starting through Steam" shows "<this file>" --window %command% to paste (Copy) and sets
+# it (closing Steam first when the player agrees): Steam's Play button then opens the window,
+# which joins the server and account saved there and closes itself when the game exits.
 #
 # Account backup: join.cmd export [FILE] writes every server's accounts (their keys), certificate
 # pin and name into one file (default roe-join-accounts.json here); join.cmd import FILE merges
@@ -2320,6 +2321,17 @@ function Get-GuiXaml {
       <Setter Property="FontWeight" Value="Bold"/>
       <Setter Property="Margin" Value="0,12,0,4"/>
     </Style>
+    <!-- The text next to a check box: only the box itself toggles it. -->
+    <Style TargetType="TextBlock" x:Key="CheckLabel">
+      <Setter Property="Margin" Value="5,0,0,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Style.Triggers>
+        <Trigger Property="IsEnabled" Value="False">
+          <Setter Property="Foreground" Value="{x:Static SystemColors.GrayTextBrush}"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
   </Window.Resources>
   <StackPanel Margin="14,4,14,14">
     <TextBlock Style="{StaticResource Heading}" Text="Server"/>
@@ -2339,7 +2351,11 @@ function Get-GuiXaml {
     <TextBlock x:Name="GameNote" Margin="0,4,0,0" TextWrapping="Wrap"/>
     <DockPanel Margin="0,14,0,0">
       <Button x:Name="VoiceButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Choose folder..."/>
-      <CheckBox x:Name="VoiceBox" Content="Voice chat" FontWeight="Bold" VerticalAlignment="Center"/>
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <CheckBox x:Name="VoiceBox" VerticalAlignment="Center" AutomationProperties.Name="Voice chat"/>
+        <TextBlock x:Name="VoiceLabel" Style="{StaticResource CheckLabel}" FontWeight="Bold" Text="Voice chat"
+                   IsEnabled="{Binding IsEnabled, ElementName=VoiceBox}"/>
+      </StackPanel>
     </DockPanel>
     <TextBlock x:Name="VoiceNote" Margin="0,4,0,0" TextWrapping="Wrap"/>
     <Border x:Name="SteamBar" Margin="0,14,0,0" Padding="8,6" BorderThickness="1" BorderBrush="#FF7A9CC6" Background="#FFEAF2FB" Visibility="Collapsed">
@@ -2353,6 +2369,29 @@ function Get-GuiXaml {
     <ToggleButton x:Name="DetailsButton" Margin="0,6,0,0" HorizontalAlignment="Left" Padding="10,2" Content="Details"/>
     <TextBox x:Name="DetailsBox" Margin="0,6,0,0" Height="170" IsReadOnly="True" TextWrapping="Wrap"
              VerticalScrollBarVisibility="Auto" FontFamily="Consolas" Visibility="Collapsed"/>
+    <Expander x:Name="SteamSetupBox" Margin="0,12,0,0" Header="Set up starting through Steam" IsExpanded="False">
+      <StackPanel Margin="0,6,0,0">
+        <TextBlock TextWrapping="Wrap" Text="With this, Steam's Play button starts the game on this server with your account, with the Steam overlay and playtime. It opens this window, which joins and closes itself when the game exits."/>
+        <TextBlock Margin="0,8,0,0" FontWeight="Bold" Text="By hand"/>
+        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="In Steam: Ring of Elysium > Properties > General > Launch options, paste this line. Steam's Play then joins the server and account you used last."/>
+        <DockPanel Margin="0,4,0,0">
+          <Button x:Name="SteamCopyButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Copy"/>
+          <TextBox x:Name="SteamLineBox" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center"/>
+        </DockPanel>
+        <TextBlock Margin="0,10,0,0" FontWeight="Bold" Text="Automatic"/>
+        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="Set up puts the line into Steam for you, with the server and account selected above. Steam has to be closed for this: join.cmd asks, closes it and can start it again."/>
+        <TextBlock x:Name="SteamText" Margin="0,4,0,0" TextWrapping="Wrap"/>
+        <WrapPanel Margin="0,6,0,0">
+          <Button x:Name="SteamSetButton" Margin="0,0,6,6" Content="Set up Start through Steam"/>
+          <Button x:Name="SteamOffButton" Margin="0,0,6,6" Content="Turn it off" Visibility="Collapsed"/>
+        </WrapPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+          <CheckBox x:Name="SteamAutoBox" VerticalAlignment="Center" AutomationProperties.Name="When Steam starts the game, join at once (3 seconds to cancel)"/>
+          <TextBlock x:Name="SteamAutoLabel" Style="{StaticResource CheckLabel}" Text="When Steam starts the game, join at once (3 seconds to cancel)"
+                     IsEnabled="{Binding IsEnabled, ElementName=SteamAutoBox}"/>
+        </StackPanel>
+      </StackPanel>
+    </Expander>
     <Expander x:Name="AdvancedBox" Margin="0,12,0,0" Header="Advanced">
       <StackPanel Margin="0,6,0,0">
         <TextBlock x:Name="FirewallText" TextWrapping="Wrap"/>
@@ -2368,14 +2407,6 @@ function Get-GuiXaml {
           <Button x:Name="ImportButton" Margin="0,0,6,6" Content="Import accounts..."/>
           <Button x:Name="LogButton" Margin="0,0,6,6" Content="Open the log"/>
         </WrapPanel>
-        <TextBlock Margin="0,8,0,0" FontWeight="Bold" Text="Start through Steam"/>
-        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="Steam's Play button (with its overlay and playtime) opens this window, which starts the game on the server and with the account selected above. Steam has to be closed to set this up or turn it off: join.cmd asks, closes it and can start it again."/>
-        <TextBlock x:Name="SteamText" Margin="0,4,0,0" TextWrapping="Wrap"/>
-        <WrapPanel Margin="0,6,0,0">
-          <Button x:Name="SteamSetButton" Margin="0,0,6,6" Content="Set up Start through Steam"/>
-          <Button x:Name="SteamOffButton" Margin="0,0,6,6" Content="Turn it off" Visibility="Collapsed"/>
-        </WrapPanel>
-        <CheckBox x:Name="SteamAutoBox" Margin="0,0,0,6" Content="When Steam starts the game, join at once (3 seconds to cancel)"/>
         <StackPanel x:Name="AdminPanel" Margin="0,6,0,0" Visibility="Collapsed">
           <TextBlock TextWrapping="Wrap" Text="This account is a GM on this server: the admin page has its settings (bots, matchmaking) and status, in your browser."/>
           <WrapPanel Margin="0,6,0,0">
@@ -2392,7 +2423,7 @@ function Get-GuiControlNames {
     return @('ServerBox', 'AddServerButton', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'Dx12Box', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
         'PlayButton', 'StatusText', 'DetailsButton', 'DetailsBox', 'AdvancedBox', 'FirewallText', 'FirewallOnButton', 'FirewallOffButton', 'FirewallResetButton',
         'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton', 'SteamBar', 'SteamBarText', 'SteamCancelButton', 'SteamText',
-        'SteamSetButton', 'SteamOffButton', 'SteamAutoBox')
+        'SteamSetButton', 'SteamOffButton', 'SteamAutoBox', 'SteamSetupBox', 'SteamLineBox', 'SteamCopyButton', 'VoiceLabel', 'SteamAutoLabel')
 }
 function Get-InputXaml {
     return @'
@@ -2828,10 +2859,12 @@ function Start-Play {
     }
 }
 # --- Start through Steam -----------------------------------------------------------------------
-# Advanced > Start through Steam: the state in Steam (checked in the worker), Set up (the
-# selected server and account as the Steam profile, and the launch option in Steam), Turn off.
+# Set up starting through Steam: the launch option line to paste (Copy), the state in Steam
+# (checked in the worker), Set up (the selected server and account as the Steam profile, and the
+# launch option in Steam), Turn off.
 function Update-SteamPanel {
     $settings = Read-Settings
+    $gui.C.SteamLineBox.Text = Get-SteamLaunchLine -Window
     $state = "$($gui.SteamState)"
     $line = Get-GuiSteamText $state $settings
     Set-Text $gui.C.SteamText $line.Text $line.Level
@@ -2839,6 +2872,13 @@ function Update-SteamPanel {
     $gui.C.SteamOffButton.Visibility = if ($state -in @('window', 'console', 'moved')) { 'Visible' } else { 'Collapsed' }
     $gui.Updating = $true
     try { $gui.C.SteamAutoBox.IsChecked = Test-SteamAutoStart $settings } finally { $gui.Updating = $false }
+}
+# Copy: the launch option line to the clipboard (the window runs in STA).
+function Set-GuiClipboard([string]$Text) { [Windows.Clipboard]::SetText($Text) }
+function Copy-SteamLine {
+    $line = Get-SteamLaunchLine -Window
+    try { Set-GuiClipboard $line; Add-Line "Copied: $line. Paste it into Steam's launch options." }
+    catch { Add-Line "Could not copy ($(Get-ErrorMessage $_)): select the line and press Ctrl+C." 'warn' }
 }
 function Request-SteamState {
     Start-Work 'Get-SteamSetupState' @{} {
@@ -3010,6 +3050,13 @@ function Open-GuiLog {
 function Add-Handler($Control, [string]$Event, [scriptblock]$Action) {
     $Control."Add_$Event"({ try { & $Action } catch { Show-GuiError $_ } }.GetNewClosure())
 }
+# The buttons and the box of "Set up starting through Steam".
+function Register-SteamHandlers {
+    Add-Handler $gui.C.SteamCopyButton 'Click' { Copy-SteamLine }
+    Add-Handler $gui.C.SteamSetButton 'Click' { Set-GuiSteam $false }
+    Add-Handler $gui.C.SteamOffButton 'Click' { Set-GuiSteam $true }
+    Add-Handler $gui.C.SteamAutoBox 'Click' { if (-not $gui.Updating) { Set-SteamProfile @{ auto_start = [bool]$gui.C.SteamAutoBox.IsChecked } } }
+}
 function Start-Gui([string]$Code) {
     $log = Get-GuiLogPath
     if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination ($log -replace '\.log$', '.old.log') -Force }
@@ -3065,9 +3112,7 @@ function Start-Gui([string]$Code) {
     Add-Handler $gui.C.ExportButton 'Click' { Export-GuiAccounts }
     Add-Handler $gui.C.ImportButton 'Click' { Import-GuiAccounts }
     Add-Handler $gui.C.LogButton 'Click' { Open-GuiLog }
-    Add-Handler $gui.C.SteamSetButton 'Click' { Set-GuiSteam $false }
-    Add-Handler $gui.C.SteamOffButton 'Click' { Set-GuiSteam $true }
-    Add-Handler $gui.C.SteamAutoBox 'Click' { if (-not $gui.Updating) { Set-SteamProfile @{ auto_start = [bool]$gui.C.SteamAutoBox.IsChecked } } }
+    Register-SteamHandlers
     Add-Handler $gui.C.SteamCancelButton 'Click' { Stop-SteamCountdown 'Started by Steam: press Play when you are ready.' }
     $window.Add_Closing({
         param($sender, $e)

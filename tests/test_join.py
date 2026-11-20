@@ -1123,7 +1123,7 @@ class JoinGui(unittest.TestCase):
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 48)
+        run_powershell(self, 'join_gui.ps1', prepare, 52)
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')

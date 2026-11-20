@@ -49,6 +49,43 @@ $window = [Windows.Markup.XamlReader]::Parse((Get-GuiXaml))
 $gui.C = @{}
 foreach ($name in (Get-GuiControlNames)) { $gui.C[$name] = $window.FindName($name) }
 Check 'main window' (@($gui.C.Values | Where-Object { $null -eq $_ }).Count -eq 0 -and $gui.C.Count -eq (Get-GuiControlNames).Count)
+# The voice chat box toggles only on the box: no content, its label a separate TextBlock, and a hit
+# on the label or the empty row lands outside the box (laid out without showing the window).
+# Steam's auto start box (the same wide row before) has the same layout.
+function Get-Ancestors($Element, [switch]$Visual) {
+    $list = New-Object System.Collections.ArrayList
+    $parent = $Element
+    while ($null -ne $parent) {
+        $parent = if ($Visual) { [Windows.Media.VisualTreeHelper]::GetParent($parent) } else { [Windows.LogicalTreeHelper]::GetParent($parent) }
+        if ($null -ne $parent) { [void]$list.Add($parent) }
+    }
+    return ,$list
+}
+function Test-HitsVoiceBox([double]$X, [double]$Y) {
+    $hit = [Windows.Media.VisualTreeHelper]::HitTest($root, [Windows.Point]::new($X, $Y))
+    if (-not $hit) { return $false }
+    return [object]::ReferenceEquals($hit.VisualHit, $gui.C.VoiceBox) -or (Get-Ancestors $hit.VisualHit -Visual).Contains($gui.C.VoiceBox)
+}
+$root = $window.Content
+$root.Measure([Windows.Size]::new(532, [double]::PositiveInfinity))
+$root.Arrange([Windows.Rect]::new(0, 0, 532, $root.DesiredSize.Height))
+$root.UpdateLayout()
+$box = $gui.C.VoiceBox.TranslatePoint([Windows.Point]::new(0, 0), $root)
+$label = $gui.C.VoiceLabel.TranslatePoint([Windows.Point]::new(0, 0), $root)
+$button = $gui.C.VoiceButton.TranslatePoint([Windows.Point]::new(0, 0), $root)
+$middle = $box.Y + $gui.C.VoiceBox.ActualHeight / 2
+$labelMiddle = $label.Y + $gui.C.VoiceLabel.ActualHeight / 2
+Check 'check boxes: only the box' ($null -eq $gui.C.VoiceBox.Content -and $null -eq $gui.C.SteamAutoBox.Content -and $gui.C.VoiceLabel.Text -eq 'Voice chat' -and
+    $gui.C.SteamAutoLabel.Text -like 'When Steam starts the game*' -and $gui.C.VoiceBox.ActualWidth -gt 0 -and $gui.C.VoiceBox.ActualWidth -lt 30 -and
+    (Test-HitsVoiceBox ($box.X + $gui.C.VoiceBox.ActualWidth / 2) $middle) -and -not (Test-HitsVoiceBox ($label.X + 3) $labelMiddle) -and
+    -not (Test-HitsVoiceBox ($button.X - 10) $middle) -and $label.X -ge ($box.X + $gui.C.VoiceBox.ActualWidth))
+# Set up starting through Steam: its own section (collapsed), not under Advanced, with the line to copy.
+$section = $gui.C.SteamSetupBox
+$inside = @('SteamText', 'SteamSetButton', 'SteamOffButton', 'SteamAutoBox', 'SteamLineBox', 'SteamCopyButton' | Where-Object {
+    $up = Get-Ancestors $gui.C[$_]; $up.Contains($section) -and -not $up.Contains($gui.C.AdvancedBox) })
+Check 'steam section' ($section -is [Windows.Controls.Expander] -and "$($section.Header)" -eq 'Set up starting through Steam' -and -not $section.IsExpanded -and
+    -not $gui.C.AdvancedBox.IsExpanded -and $inside.Count -eq 6 -and $gui.C.SteamLineBox.IsReadOnly -and "$($gui.C.SteamCopyButton.Content)" -eq 'Copy' -and
+    $root.Children.IndexOf($section) -lt $root.Children.IndexOf($gui.C.AdvancedBox))
 $dialog = [Windows.Markup.XamlReader]::Parse((Get-InputXaml))
 Check 'input dialog' ($dialog.FindName('AnswerBox') -and $dialog.FindName('OkButton') -and $dialog.FindName('PromptText'))
 # While the game runs the admin page still opens (its own worker); not twice at once.
@@ -271,10 +308,19 @@ $gui.SteamState = 'window'
 Update-SteamPanel
 Check 'steam panel' ($off -and "$($gui.C.SteamSetButton.Content)" -eq 'Use the selected server and account' -and "$($gui.C.SteamOffButton.Visibility)" -eq 'Visible' -and
     $gui.C.SteamText.Text -eq "On: Steam's Play button starts the game on 127.0.0.5 as Ben." -and -not $gui.C.SteamAutoBox.IsChecked)
+# The section's buttons as Start-Gui wires them: Copy puts the line on the clipboard.
+function Show-GuiError($Record, [string]$Prefix = '') { $global:GuiError = "$Record" }
+function Set-GuiClipboard([string]$Text) { $global:Clip = $Text }
+function Send-Click($Control) { $Control.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Primitives.ButtonBase]::ClickEvent)) }
+Register-SteamHandlers
+$global:GuiError = ''; $global:Clip = ''
+Send-Click $gui.C.SteamCopyButton
+$line = "`"$env:ROE_JOIN_SELF`" --window %command%"
+Check 'steam line, copy' ($gui.C.SteamLineBox.Text -ceq $line -and $global:Clip -ceq $line -and $gui.C.StatusText.Text -like "Copied: $line.*" -and -not $global:GuiError)
 # On already: another account changes only the profile, Steam is not touched.
 Update-ServerList '127.0.0.5'
 $gui.C.AccountBox.SelectedIndex = [array]::IndexOf(@($gui.Accounts | ForEach-Object { $_.name }), 'Anna')
-Set-GuiSteam $false
+Send-Click $gui.C.SteamSetButton
 Check 'set up: only the profile' ((Read-Settings).steam.account -ceq (Get-AccountId $t1) -and -not $global:Work.Count -and -not $global:Shown.Count -and
     $gui.C.SteamText.Text -like '*as Anna.' -and $gui.C.StatusText.Text -like '*now starts the game on 127.0.0.5 as Anna.')
 # Off in Steam: Steam open, the player says no: nothing; yes: the write closes Steam first.
@@ -304,7 +350,7 @@ Set-GuiSteam $true
 $checking = $gui.SteamState -eq '' -and -not $global:Work.Count -and $gui.C.StatusText.Text -like 'Still checking Steam*'
 $gui.SteamState = 'window'
 $global:Replies2.Enqueue('Yes')
-Set-GuiSteam $true
+Send-Click $gui.C.SteamOffButton
 $w = $global:Work[0]
 $global:Work.Clear()
 $global:Replies2.Enqueue('No')
@@ -316,6 +362,9 @@ $w = $null
 Start-GuiSteamWrite $false $true $false
 & $global:Work[0].OnDone ([pscustomobject]@{ Ok = $false; Message = 'Steam did not close. Close it yourself (Steam > Exit) and try again.' })
 Check 'set up: error' ($gui.C.StatusText.Text -eq 'Start through Steam: Steam did not close. Close it yourself (Steam > Exit) and try again.' -and -not $global:Shown.Count)
+$gui.C.SteamAutoBox.IsChecked = $true
+Send-Click $gui.C.SteamAutoBox
+Check 'steam auto box' ((Read-Settings).steam.auto_start -eq $true -and -not $global:GuiError)
 
 # Started by Steam: Steam's folder (its XVersion as saved), the profile's server and account, the countdown.
 $global:Work.Clear()
