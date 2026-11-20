@@ -7,6 +7,14 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- Start through Steam from the window: **Advanced > Set up Start through Steam** puts it into
+  Steam with the server and account selected in the window. If Steam is open, it asks to close it
+  and offers to start it again afterwards. Steam's Play button then opens join.cmd's window (no
+  console), which starts the game after 3 seconds (Cancel stops it; a box turns that off, then it
+  waits for Play) and closes itself when the game exits. The window shows whether it is on and for
+  which server and account; pressing the button again takes the newly selected ones, **Turn it
+  off** removes it. Set up with the console's `join.cmd steam-setup` before? That keeps working;
+  the button switches it to the window.
 - Start through Steam: Steam's Play button (with its overlay and playtime) can start the game
   through join.cmd. `join.cmd steam-setup` shows the launch option line (`"<path>\join.cmd"
   %command%`) and, while Steam is closed, puts it into Steam for you (a backup of Steam's

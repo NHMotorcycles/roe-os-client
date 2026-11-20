@@ -212,8 +212,8 @@ function Update-Firewall([string]$Client, $ServerList, [string]$Server, [string[
     Set-ServerAddresses $ServerList $Server $Listed ([string[]]@())
     return [pscustomobject]@{ Programs = @(); Check = $null }
 }
-function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
-    $global:Started = @($Client, $Uid, $Ip, $VoicePick)
+function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick, [string[]]$Extra = @()) {
+    $global:Started = @($Client, $Uid, $Ip, $VoicePick, (@($Extra) -join ','))
     $process = [pscustomobject]@{}
     $process | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($ms) $true }
     return [pscustomobject]@{ Process = $process; VoiceOn = $false }
@@ -236,3 +236,118 @@ $global:Replies['VERSION'] = 'OK min=9 current=9'
 $stop = ''
 try { Invoke-PlayJob (Join-Path $Base 'game') '127.0.0.5' $t2 'Ben' $false $false | Out-Null } catch { $stop = $_.Exception.Message }
 Check 'play: too old' ($stop -like 'This join.cmd is version*Download the new join.cmd*')
+$global:Replies['VERSION'] = 'OK min=0 current=0'
+$extraFree = $global:Started[4]
+Invoke-PlayJob (Join-Path $Base 'game') '127.0.0.5' $t2 'Ben' $false $false @('-windowed', '-x') | Out-Null
+Check 'play: Steam''s extra arguments' ($extraFree -eq '' -and $global:Started[4] -eq '-windowed,-x')
+$item = $null
+while ($sync.Events.TryDequeue([ref]$item)) { }
+
+# Start through Steam in the window (dialogs, work and Steam replaced): the panel, Set up and a
+# start by Steam with the profile's server and account.
+function Write-GuiLog([string]$Text) { }
+$global:Shown = New-Object System.Collections.ArrayList
+$global:Replies2 = New-Object System.Collections.Queue
+function Show-Message { param($Text, $Buttons, $Icon, $Default) [void]$global:Shown.Add("$Text"); return $global:Replies2.Dequeue() }
+$global:Work = New-Object System.Collections.ArrayList
+function Start-Work([string]$Command, [hashtable]$Arguments, [scriptblock]$OnDone) { [void]$global:Work.Add([pscustomobject]@{ Command = $Command; Arguments = $Arguments; OnDone = $OnDone }) }
+function Test-SteamRunning { return $true }
+function Start-Steam { $global:SteamStarted = $true }
+$gui.Window = $window
+$gui.Recent = New-Object System.Collections.ArrayList
+$gui.Playing = $false; $gui.GameRunning = $false; $gui.SteamBusy = $false; $gui.SteamClosed = $false; $gui.CountdownTimer = $null; $gui.SteamGame = $null
+Update-Controls
+$enabled = $gui.C.SteamSetButton.IsEnabled
+$gui.SteamBusy = $true
+Update-Controls
+Check 'steam buttons' ($enabled -and -not $gui.C.SteamSetButton.IsEnabled -and -not $gui.C.SteamOffButton.IsEnabled)
+$gui.SteamBusy = $false
+Update-Controls
+$gui.SteamState = 'off'
+Update-SteamPanel
+$off = "$($gui.C.SteamSetButton.Content)" -eq 'Set up Start through Steam' -and "$($gui.C.SteamOffButton.Visibility)" -eq 'Collapsed' -and $gui.C.SteamText.Text -eq 'Off.' -and $gui.C.SteamAutoBox.IsChecked
+Set-SteamProfile @{ server = '127.0.0.5'; account = (Get-AccountId $t2); auto_start = $false }
+$gui.SteamState = 'window'
+Update-SteamPanel
+Check 'steam panel' ($off -and "$($gui.C.SteamSetButton.Content)" -eq 'Use the selected server and account' -and "$($gui.C.SteamOffButton.Visibility)" -eq 'Visible' -and
+    $gui.C.SteamText.Text -eq "On: Steam's Play button starts the game on 127.0.0.5 as Ben." -and -not $gui.C.SteamAutoBox.IsChecked)
+# On already: another account changes only the profile, Steam is not touched.
+Update-ServerList '127.0.0.5'
+$gui.C.AccountBox.SelectedIndex = [array]::IndexOf(@($gui.Accounts | ForEach-Object { $_.name }), 'Anna')
+Set-GuiSteam $false
+Check 'set up: only the profile' ((Read-Settings).steam.account -ceq (Get-AccountId $t1) -and -not $global:Work.Count -and -not $global:Shown.Count -and
+    $gui.C.SteamText.Text -like '*as Anna.' -and $gui.C.StatusText.Text -like '*now starts the game on 127.0.0.5 as Anna.')
+# Off in Steam: Steam open, the player says no: nothing; yes: the write closes Steam first.
+$gui.SteamState = 'off'
+$global:Replies2.Enqueue('No')
+Set-GuiSteam $false
+$no = -not $global:Work.Count -and $global:Shown[0] -like 'Steam has to be closed to set up Start through Steam*'
+$global:Replies2.Enqueue('Yes')
+Set-GuiSteam $false
+$w = $global:Work[0]
+Check 'set up: closes Steam' ($no -and $w.Command -eq 'Invoke-SteamWrite' -and $w.Arguments.CloseSteam -and -not $w.Arguments.Off -and -not $w.Arguments.Replace)
+# Other launch options: asked, then replaced; at the end Steam started again and the state read.
+$global:Work.Clear(); $global:Shown.Clear()
+$global:Replies2.Enqueue('Yes')
+& $w.OnDone ([pscustomobject]@{ Ok = $true; Result = [pscustomobject]@{ Done = $false; Other = '-dx11'; Closed = $true } })
+$again = $global:Work[0]
+$asked = $global:Shown[0] -like '*other launch options*-dx11*Replace them?'
+$global:Work.Clear(); $global:Shown.Clear()
+$global:SteamStarted = $false
+$global:Replies2.Enqueue('Yes')
+& $again.OnDone ([pscustomobject]@{ Ok = $true; Result = [pscustomobject]@{ Done = $true; Other = ''; Closed = $false } })
+Check 'set up: replace, Steam again' ($asked -and $again.Arguments.Replace -and -not $again.Arguments.CloseSteam -and $global:Shown[0] -eq 'Start Steam again?' -and $global:SteamStarted -and
+    $global:Work[0].Command -eq 'Get-SteamSetupState' -and $gui.C.StatusText.Text -like 'Start through Steam is on*as Anna.' -and -not $gui.SteamBusy)
+# Turn off: our line removed, the profile's server and account forgotten (auto start kept).
+$global:Work.Clear(); $global:Shown.Clear()
+Set-GuiSteam $true
+$checking = $gui.SteamState -eq '' -and -not $global:Work.Count -and $gui.C.StatusText.Text -like 'Still checking Steam*'
+$gui.SteamState = 'window'
+$global:Replies2.Enqueue('Yes')
+Set-GuiSteam $true
+$w = $global:Work[0]
+$global:Work.Clear()
+$global:Replies2.Enqueue('No')
+& $w.OnDone ([pscustomobject]@{ Ok = $true; Result = [pscustomobject]@{ Done = $true; Other = ''; Closed = $true } })
+$read = Read-Settings
+Check 'turn off' ($checking -and $w.Arguments.Off -and $w.Arguments.CloseSteam -and -not $read.steam.server -and $read.steam.auto_start -eq $false -and $gui.C.StatusText.Text -like 'Start through Steam is off*')
+$global:Work.Clear(); $global:Shown.Clear()
+$w = $null
+Start-GuiSteamWrite $false $true $false
+& $global:Work[0].OnDone ([pscustomobject]@{ Ok = $false; Message = 'Steam did not close. Close it yourself (Steam > Exit) and try again.' })
+Check 'set up: error' ($gui.C.StatusText.Text -eq 'Start through Steam: Steam did not close. Close it yourself (Steam > Exit) and try again.' -and -not $global:Shown.Count)
+
+# Started by Steam: Steam's folder (its XVersion as saved), the profile's server and account, the countdown.
+$global:Work.Clear()
+$gui.SteamGame = Find-WindowSteamGame ("--window `"$(Join-Path $both 'SLauncher.exe')`" -steam -maintenance -windowed")
+Update-Settings @{ client = (Join-Path $both 'XVersion') }
+Set-SteamProfile @{ server = '127.0.0.5'; account = (Get-AccountId $t1); auto_start = $true }
+Initialize-SteamStart (Read-Settings)
+$name = "$((Get-SelectedAccount).name)"
+Check 'steam start' ($gui.Client -eq (Join-Path $both 'XVersion') -and $gui.Dx12 -and (Get-SelectedServer) -eq '127.0.0.5' -and $name -eq 'Anna' -and $gui.Window.Title -like '*started by Steam' -and
+    "$($gui.C.SteamBar.Visibility)" -eq 'Visible' -and "$($gui.C.SteamCancelButton.Visibility)" -eq 'Visible' -and $gui.CountdownTimer -and
+    $gui.C.SteamBarText.Text -eq 'Started by Steam: the game starts in 3 s on 127.0.0.5 as Anna.')
+$gui.C.VoiceBox.IsChecked = $false
+Step-SteamCountdown
+$two = $gui.C.SteamBarText.Text -like '*starts in 2 s*' -and -not $global:Work.Count
+Step-SteamCountdown
+Step-SteamCountdown
+$w = $global:Work[0]
+Check 'countdown: play' ($two -and $w.Command -eq 'Invoke-PlayJob' -and (@($w.Arguments.Extra) -join ',') -eq '-windowed' -and $w.Arguments.Token -ceq $t1 -and
+    $w.Arguments.Client -eq (Join-Path $both 'XVersion') -and -not $gui.CountdownTimer -and "$($gui.C.SteamCancelButton.Visibility)" -eq 'Collapsed' -and
+    $gui.C.SteamBarText.Text -like '*closes itself when the game exits.')
+$global:Closing = $false
+$window.Add_Closing({ $global:Closing = $true })
+& $w.OnDone ([pscustomobject]@{ Ok = $true; Result = 'Anna' })
+Check 'game exit closes the window' ($global:Closing -and -not $gui.Playing)
+$gui.Playing = $false
+$global:Work.Clear()
+Initialize-SteamStart (Read-Settings)
+Stop-SteamCountdown 'Started by Steam: press Play when you are ready.'
+$cancelled = -not $gui.CountdownTimer -and $gui.C.SteamBarText.Text -eq 'Started by Steam: press Play when you are ready.' -and -not $global:Work.Count
+Set-SteamProfile @{ auto_start = $false }
+Initialize-SteamStart (Read-Settings)
+$wait = -not $gui.CountdownTimer -and $gui.C.SteamBarText.Text -eq 'Started by Steam: press Play when you are ready.'
+Set-SteamProfile @{ account = (Get-AccountId ('z' * 64)); auto_start = $true }
+Initialize-SteamStart (Read-Settings)
+Check 'steam start: cancel, wait, account gone' ($cancelled -and $wait -and -not $gui.CountdownTimer -and $gui.C.SteamBarText.Text -like '*account saved for Steam is gone*' -and -not $global:Work.Count)

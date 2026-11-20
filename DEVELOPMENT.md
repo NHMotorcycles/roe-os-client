@@ -12,7 +12,9 @@ share the settings, accounts and keys. Its batch part decides:
   (Explorer runs `cmd.exe /c ""...\join.cmd" "`), a shortcut, or `.\join.cmd` from PowerShell
   all start cmd.exe with `/c`, a command prompt's own cmd.exe has none. `join.cmd --window`
   forces it. The window runs in a hidden PowerShell (`-WindowStyle Hidden -STA`), so no console
-  stays open.
+  stays open. `--window` with more after it (Steam's launch option `"<join.cmd>" --window
+  %command%`) is the window too, and then the batch part waits for it instead of `start`ing it,
+  so the process Steam started lives as long as the game.
 - **The console** with any argument (`-Server`, `-Name`, `firewall`, `voice`, `export`,
   `import`, `admin`), or typed in a command prompt without arguments. `join.cmd --console`
   forces it, for example from PowerShell.
@@ -92,12 +94,39 @@ file as `localconfig.vdf.<date>.roe-join.bak` next to it and changes only that k
 reader that keeps the rest byte for byte). `steam-setup off` removes our line (someone else's
 launch options stay) and the profile.
 
+The window's **Advanced > Start through Steam** does the same without a console and writes the
+window form `"<path>\join.cmd" --window %command%`:
+
+- **The state** (read in the worker at the start and after each change): for the Steam users
+  that played the game (else the most recently logged in one) the launch options are off, someone
+  else's, ours in the window form for this join.cmd (on: it names the profile's server and
+  account), ours in the console form, or ours for a join.cmd elsewhere (then Set up offers the
+  window form for this one).
+- **Set up** saves the selected server and account as the profile (`steam.server`,
+  `steam.account` as for steam-setup). When the window form is already in Steam that is all
+  (Steam is not touched). Otherwise, with Steam running, it asks to close it, runs `steam.exe
+  -shutdown` (else `steam://exit`), waits up to 60 s for every `steam` process to end, then sets
+  the line for those users (backup next to localconfig.vdf as above). Someone else's launch
+  options are replaced only after a question; ours in the console form or for another path are
+  replaced at once. Afterwards it offers to start Steam again. **Turn it off** removes our line
+  the same way and clears the profile's server and account.
+- **The box** "When Steam starts the game, join at once" is `steam.auto_start` (missing: on).
+
+Started that way (`--window` followed by a command line naming `SLauncher.exe` or
+`Europa_Client.exe`), the window takes Steam's game folder (its `XVersion` when that is the saved
+one), the server and account as the console's Steam start does (profile, else the last used
+ones), shows a bar above Play and, with auto start, counts down 3 s (**Cancel** stops it) and
+presses Play; without it, or when the profile's account is gone or the game folder has a problem,
+it waits for Play. What followed `%command%` goes to the game. When the game exits it closes
+itself (after putting the voice DLL back), so Steam's Playing ends; after a failed join it stays
+open. The console form keeps working as before.
+
 join.py does the same on Linux: `python3 join.py --steam-setup [off]` (with `--server`, `--name`),
 launch option `python3 "/path/join.py" --steam %command%`. There `%command%` is Steam's whole
 chain (reaper, the Steam Linux Runtime, Proton, then SLauncher.exe); join.py runs it with
 `Europa_Client.exe` and our arguments in place of SLauncher.exe and its arguments, so Steam's
 Proton and prefix are used. A failure without a terminal shows a message with zenity, kdialog or
-notify-send when one exists.
+notify-send when one exists. join.py has no window, so its Steam start stays this console one.
 
 ## The voice DLL
 

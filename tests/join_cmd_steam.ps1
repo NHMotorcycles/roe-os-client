@@ -125,3 +125,67 @@ Check 'profile kept' ((Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom
 Answer @('n')
 Invoke-SteamSetup (Read-Settings) $false '' '' $steamFolder
 Check 'profile removed' ($null -eq (Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json).steam)
+
+# The window's Start through Steam: its launch option opens the window with Steam's command line.
+$self = $env:ROE_JOIN_SELF
+$windowLine = Get-SteamLaunchLine -Window
+Check 'window line' ($windowLine -ceq '"C:\Users\A B\Desktop\join.cmd" --window %command%' -and (Get-SteamLaunchLine) -ceq $line)
+$found = Find-WindowSteamGame ('--window ' + $steam + ' -windowed')
+Check 'window: steam game' ($found -and $found.Folder -eq 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' -and (@($found.Extra) -join ',') -eq '-windowed' -and
+    $null -eq (Find-WindowSteamGame '--window') -and $null -eq (Find-WindowSteamGame ''))
+Check 'launch states' ((Get-LaunchState $null) -eq 'off' -and (Get-LaunchState ' ') -eq 'off' -and (Get-LaunchState '-dx11') -eq 'other' -and
+    (Get-LaunchState $windowLine) -eq 'window' -and (Get-LaunchState $line) -eq 'console' -and
+    (Get-LaunchState '"D:\Other\join.cmd" --window %command%') -eq 'moved' -and (Get-LaunchState '"c:\users\a b\desktop\JOIN.cmd" --window %command%') -eq 'window')
+$state = Get-SteamSetupState $steamFolder
+$none = Get-SteamSetupState (Join-Path $Base 'nothing')
+Check 'setup state' ($state.State -eq 'other' -and $state.Options -ceq '-dx11' -and $none.State -eq 'nosteam')
+Check 'targets' ((@(Get-SteamTargets $users) | ForEach-Object { $_.Id }) -join ',' -eq '30642568' -and
+    (@(Get-SteamTargets @([pscustomobject]@{ Id = '1'; Owns = $false }, [pscustomobject]@{ Id = '2'; Owns = $false })) | ForEach-Object { $_.Id }) -join ',' -eq '1')
+
+# Closing Steam (mocked): steam.exe -shutdown when it is there, else steam://exit; then the write.
+$global:SteamUp = $true
+$global:Launched = New-Object System.Collections.ArrayList
+function Test-SteamRunning { return $global:SteamUp }
+function Start-Process { param($FilePath, $ArgumentList) [void]$global:Launched.Add("$FilePath $ArgumentList".Trim()); if ("$ArgumentList" -eq '-shutdown' -or "$FilePath" -eq 'steam://exit') { $global:SteamUp = $false } }
+$refused = ''
+try { Invoke-SteamWrite $false $false $false $steamFolder | Out-Null } catch { $refused = $_.Exception.Message }
+Check 'write: steam open' ($refused -like 'Steam is open*' -and (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -ceq '-dx11' -and -not $global:Launched.Count)
+$result = Invoke-SteamWrite $false $true $false $steamFolder
+Check 'write: steam closed, others kept' ($result.Closed -and -not $result.Done -and $result.Other -ceq '-dx11' -and $global:Launched[0] -eq 'steam://exit' -and
+    (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -ceq '-dx11')
+$result = Invoke-SteamWrite $false $false $true $steamFolder
+Check 'write: replaced' ($result.Done -and -not $result.Closed -and (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -ceq $windowLine -and (Get-SteamSetupState $steamFolder).State -eq 'window')
+[IO.File]::WriteAllText($config, (Set-LaunchOptions $sample $line))
+$result = Invoke-SteamWrite $false $false $false $steamFolder
+Check 'write: console form replaced' ($result.Done -and (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -ceq $windowLine)
+$result = Invoke-SteamWrite $true $false $false $steamFolder
+Check 'write: off' ($result.Done -and $null -eq (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -and (Get-SteamSetupState $steamFolder).State -eq 'off')
+New-Item -ItemType File -Force -Path (Join-Path $steamFolder 'steam.exe') | Out-Null
+$global:SteamUp = $true; $global:Launched.Clear()
+Check 'stop steam: steam.exe' ((Stop-Steam $steamFolder 5) -and $global:Launched[0] -eq "$(Join-Path $steamFolder 'steam.exe') -shutdown")
+function Start-Process { param($FilePath, $ArgumentList) [void]$global:Launched.Add("$FilePath $ArgumentList".Trim()) }
+$global:SteamUp = $true; $global:Launched.Clear()
+Check 'stop steam: stays open' (-not (Stop-Steam $steamFolder 1) -and $global:Launched.Count -eq 1)
+$global:Launched.Clear()
+Start-Steam $steamFolder
+Check 'start steam' ($global:Launched[0] -eq (Join-Path $steamFolder 'steam.exe'))
+
+# The window's Steam profile: the selected server and account, auto start (on unless turned off).
+Set-SteamProfile @{ server = 'roe-os.de'; account = (Get-AccountId ('a' * 64)) }
+$read = Read-Settings
+Check 'window profile' ($read.steam.server -eq 'roe-os.de' -and $read.steam.account -ceq 'ffe054fe7ae0cb6d' -and (Test-SteamAutoStart $read) -and
+    (Get-SteamProfileText $read) -eq 'on roe-os.de as Anna' -and (Get-GuiSteamText 'window' $read).Text -eq "On: Steam's Play button starts the game on roe-os.de as Anna.")
+Set-SteamProfile @{ auto_start = $false }
+Save-JoinSettings $game $true $true '' @()
+$read = Read-Settings
+Check 'auto start off, kept' (-not (Test-SteamAutoStart $read) -and $read.steam.server -eq 'roe-os.de' -and (Test-SteamAutoStart ([pscustomobject]@{ client = '' })))
+Set-SteamProfile @{ account = (Get-AccountId ('z' * 64)) }
+$gone = Get-SteamProfileText (Read-Settings)
+Set-SteamProfile @{ server = ''; account = '' }
+$read = Read-Settings
+Check 'profile texts' ($gone -like 'on roe-os.de, but its account is gone*' -and (Get-SteamProfileText $read) -eq 'on the server and with the account you used last' -and -not (Test-SteamAutoStart $read) -and
+    (Get-SteamProfileText ([pscustomobject]@{ steam = [pscustomobject]@{ server = 'x.example'; account = '' } })) -eq 'on x.example with the account you used last there')
+Check 'state texts' ((Get-GuiSteamText 'off' $read).Text -eq 'Off.' -and (Get-GuiSteamText 'console' $read).Level -eq 'warn' -and (Get-GuiSteamText 'moved' $read).Text -like '*another folder*' -and
+    (Get-GuiSteamText 'nosteam' $read).Text -like '*not found*' -and (Get-GuiSteamText '' $read).Text -eq 'Checking Steam ...')
+Check 'countdown text' ((Get-SteamCountdownText 3 'roe-os.de' 'Anna') -eq 'Started by Steam: the game starts in 3 s on roe-os.de as Anna.' -and
+    (Get-SteamCountdownText 1 'roe-os.de' '') -like '*1 s on roe-os.de with a new account.')

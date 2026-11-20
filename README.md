@@ -32,16 +32,16 @@ Everything is saved, so next time it's just **Play**.
 
 Want Steam's **Play** button, overlay and playtime? Play once with join.cmd as above, then:
 
-1. Open a command prompt in the folder of join.cmd and run `join.cmd steam-setup`.
-2. It shows a line like `"C:\...\join.cmd" %command%`. Exit Steam (Steam > Exit) and answer
-   **y**: it puts the line into Steam for you. Or copy it into **Ring of Elysium > Properties >
-   General > Launch options** yourself (Steam may stay open for that).
-3. Press **Play** in Steam. A console window logs in with the server and account you used last
-   and starts the game. Leave it open while you play.
+1. In join.cmd's window, pick the server and account Steam should use, open **Advanced** and
+   click **Set up Start through Steam**.
+2. If Steam is open, join.cmd asks to close it (Steam must be closed for this) and offers to
+   start it again when it is done.
+3. Press **Play** in Steam. join.cmd's window opens and starts the game after 3 seconds
+   (**Cancel** stops that). It closes itself when the game exits.
 
-To always use one account: `join.cmd -Server roe-os.de -Name YourName steam-setup`. To undo:
-`join.cmd steam-setup off`, or empty the launch options in Steam. Don't move join.cmd afterwards
-(or run steam-setup again). Linux: `python3 join.py --steam-setup`.
+Another server or account for Steam: select it and click the button again. Wait for **Play**
+instead of starting at once: untick the box below the button. **Turn it off** undoes it. Don't move
+join.cmd afterwards (or set it up again). Linux: `python3 join.py --steam-setup` (no window there).
 
 ## :globe_with_meridians: Our Server
 

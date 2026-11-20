@@ -1123,7 +1123,7 @@ class JoinGui(unittest.TestCase):
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 36)
+        run_powershell(self, 'join_gui.ps1', prepare, 48)
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
@@ -1144,9 +1144,11 @@ class JoinCmdStart(unittest.TestCase):
         batch = (JOIN.parent / 'join.cmd').read_text().split('#>')[0]
         # The two PowerShell starts print what they would start instead.
         window = 'start "" /min powershell.exe '
+        wait = '\n  powershell.exe '
         console = '\npowershell.exe '
-        self.assertEqual((batch.count(window), batch.count(console)), (1, 1))
-        batch = batch.replace(window, 'echo MODE window & rem ').replace(console, '\necho MODE console [%ROE_JOIN_ARGS%] & rem ')
+        self.assertEqual((batch.count(window), batch.count(wait), batch.count(console)), (1, 1, 1))
+        batch = batch.replace(window, 'echo MODE window & rem ').replace(wait, '\n  echo MODE window-wait [!ROE_JOIN_ARGS!] & rem ')
+        batch = batch.replace(console, '\necho MODE console [%ROE_JOIN_ARGS%] & rem ')
         with tempfile.TemporaryDirectory(dir=temp) as tmp:
             base = Path(tmp) / 'a b!c'
             base.mkdir()
@@ -1165,6 +1167,9 @@ class JoinCmdStart(unittest.TestCase):
             # Started by Steam ("<join.cmd>" %command%): Windows runs a .cmd as cmd /c "<the line>".
             steam = r'"C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\SLauncher.exe" -steam -maintenance'
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" {steam}"'), [f'MODE console [{steam}]'])
+            # The window's launch option ("<join.cmd>" --window %command%): the window, waited for.
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window {steam} -windowed"'), [f'MODE window-wait [--window {steam} -windowed]'])
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --windowed"'), ['MODE console [--windowed]'])
 
 
 # A localconfig.vdf as Steam writes it (tabs, LF), cut down: the game's block without launch
@@ -1413,7 +1418,7 @@ class JoinCmdSteam(unittest.TestCase):
                   % (30642568 + join.STEAM_ID64_BASE))
             touch(base / 'game/Europa_Client.exe')
             touch(base / 'game/XVersion/Europa_Client.exe')
-        run_powershell(self, 'join_cmd_steam.ps1', prepare, 32)
+        run_powershell(self, 'join_cmd_steam.ps1', prepare, 50)
 
 
 if __name__ == '__main__':
