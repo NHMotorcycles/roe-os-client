@@ -30,6 +30,16 @@ Everything is saved, so next time it's just **Play**.
 > [!IMPORTANT]
 > **Played with other launchers before?** Many of them change your game files without asking. join.cmd checks this before every start: if it says your game files were changed, verify them in Steam (**Ring of Elysium > Properties > Installed Files > Verify integrity of game files**) and start again.
 
+**Still can't connect?** Check out the [Firewall](#shield-firewall) section.
+
+## :globe_with_meridians: Our Server
+
+### roe-os.de
+- 64 tick with very performant architecture for good hit reg
+- Choose Region Europe for normal matches, on german servers
+- Region Asia for a custom developed **Duel** game mode, on german servers
+- Region America is ready to go online and let you play on NA servers, as soon as it makes sense with the player numbers
+
 ## :arrow_forward: Start through Steam
 
 Want Steam's **Play** button, overlay and playtime? Play once with join.cmd as above, then:
@@ -50,14 +60,6 @@ Another server or account for Steam: select it and click the button again. Wait 
 instead of starting at once: untick the box below the button. **Turn it off** undoes it. Don't move
 join.cmd afterwards (or set it up again). Linux: `python3 join.py --steam-setup` (no window there).
 
-## :globe_with_meridians: Our Server
-
-### roe-os.de
-- 64 tick with very performant architecture for good hit reg
-- Choose Region Europe for normal matches, on german servers
-- Region Asia for a custom developed **Duel** game mode, on german servers
-- Region America is ready to go online and let you play on NA servers, as soon as it makes sense with the player numbers
-
 
 ## :bust_in_silhouette: Your account
 
@@ -75,7 +77,7 @@ On by default, if **GCloudVoice.dll** is next to join.cmd (or you pick its folde
 own voice servers are gone; this DLL replaces them. It's only put into the game folder while you
 play: the game's original file is saved and put back when the game closes.
 
-**Don't** copy the DLL into the game folder yourself.
+**Don't** copy the DLL into the game folder yourself. Else you lose your original file.
 
 ## :shield: Firewall
 
