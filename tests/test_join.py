@@ -753,6 +753,10 @@ class ServerMenu(unittest.TestCase):
         self.assertEqual(join.format_stats('OK 5,normal,0,0,0,%0A'), 'zone 5 (normal): 0 online, 0 searching, 0 matches')
         for old in ('OK', 'INVALID', 'LIMIT', '', None):
             self.assertEqual(join.format_stats(old), '')
+        # A region's state: down shows offline (no counts), up or anything else the counts.
+        states = 'OK 7,normal,1,0,0,EU%20SERVER,up 5,normal,2,1,0,NA%20SERVER,down 6,duel,0,0,0,AS%20SERVER,later'
+        self.assertEqual(join.format_stats(states), 'EU (normal): 1 online, 0 searching, 0 matches | NA (normal): offline | '
+                                                    'AS (duel): 0 online, 0 searching, 0 matches')
         # The line after the login and while the game runs: every region (the live server's reply),
         # INFO only from a server without STATS, INFO's restart notice either way.
         live = 'OK 7,normal,0,0,0,EU%20SERVER 6,duel,0,0,0,AS%20SERVER'
@@ -849,7 +853,7 @@ class JoinCmdAccounts(unittest.TestCase):
 class JoinCmdServers(unittest.TestCase):
     """join.cmd's server menu, the servers list and -Server (through powershell.exe)."""
     def test_functions(self):
-        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 50)
+        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 51)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
@@ -1123,7 +1127,7 @@ class JoinGui(unittest.TestCase):
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 52)
+        run_powershell(self, 'join_gui.ps1', prepare, 54)
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')

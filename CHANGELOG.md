@@ -7,6 +7,10 @@ CHANGELOG.md.
 
 ## 1.0 (2026-11-20)
 
+- A region that is down (it takes no new match, the game greys it out) shows as offline: the
+  window's server line has "NA (normal): offline" in grey on its own line, join.cmd's console and
+  join.py print it the same way in "On the server now". It needs a server from 2026-11-20 on; older
+  servers show every region with its numbers as before.
 - The window's voice chat box (and the box for Steam's auto start) only toggles on a click on the
   box itself, no longer on its text or the empty space next to it. Space still toggles it.
 - Start through Steam has its own section in the window, **Set up starting through Steam**

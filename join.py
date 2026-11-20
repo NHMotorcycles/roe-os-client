@@ -1318,7 +1318,8 @@ def version_notice(reply, have=JOIN_VERSION, script='join.py'):
 
 def format_stats(reply):
     """The account service's STATS answer as one line, a part per region:
-    "EU (normal): 12 online, 3 searching, 2 matches | AS (duel): ...". '' from an older server."""
+    "EU (normal): 12 online, 3 searching, 2 matches | NA (normal): offline". A region whose state
+    (the field after the name) is down takes no new match (the game greys it out). '' from an older server."""
     if reply != 'OK' and not (reply or '').startswith('OK '):
         return ''
     parts = []
@@ -1328,6 +1329,9 @@ def format_stats(reply):
             continue
         name = ''.join(c for c in urllib.parse.unquote(fields[5], errors='replace') if c.isprintable())[:40]
         name = re.sub(r'\s+SERVER$', '', name).strip() or f'zone {fields[0]}'
+        if len(fields) > 6 and fields[6] == 'down':
+            parts.append(f'{name} ({fields[1]}): offline')
+            continue
         online, searching, matches = (int(f) for f in fields[2:5])
         parts.append(f"{name} ({fields[1]}): {online} online, {searching} searching, {matches} match{'' if matches == 1 else 'es'}")
     return ' | '.join(parts)

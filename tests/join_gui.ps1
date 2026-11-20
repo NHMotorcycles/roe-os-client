@@ -49,6 +49,14 @@ $window = [Windows.Markup.XamlReader]::Parse((Get-GuiXaml))
 $gui.C = @{}
 foreach ($name in (Get-GuiControlNames)) { $gui.C[$name] = $window.FindName($name) }
 Check 'main window' (@($gui.C.Values | Where-Object { $null -eq $_ }).Count -eq 0 -and $gui.C.Count -eq (Get-GuiControlNames).Count)
+# The server line: a region per line, an offline one greyed, the others in the line's color.
+Set-StatsText $gui.C.ServerStats "[12:00] On the server now: EU (normal): 1 online, 0 searching, 0 matches`nNA (normal): offline."
+$runs = @($gui.C.ServerStats.Inlines | Where-Object { $_ -is [Windows.Documents.Run] })
+$muted = [Windows.SystemColors]::GrayTextBrush.Color
+Check 'server line: offline region greyed' ($runs.Count -eq 2 -and $runs[0].Text -like '*EU (normal): 1 online, 0 searching, 0 matches' -and $runs[1].Text -ceq 'NA (normal): offline.' -and
+    "$($runs[1].Foreground.Color)" -eq "$muted" -and "$($runs[0].Foreground.Color)" -ne "$muted" -and @($gui.C.ServerStats.Inlines).Count -eq 3)
+Set-Text $gui.C.ServerStats 'Contacting x ...' 'muted'
+Check 'server line: plain text again' (@($gui.C.ServerStats.Inlines).Count -eq 1 -and $gui.C.ServerStats.Text -ceq 'Contacting x ...')
 # The voice chat box toggles only on the box: no content, its label a separate TextBlock, and a hit
 # on the label or the empty row lands outside the box (laid out without showing the window).
 # Steam's auto start box (the same wide row before) has the same layout.

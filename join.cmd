@@ -1017,7 +1017,8 @@ function Get-ServerStats([string]$Ip, [string]$Folder) {
     return $reply
 }
 # The answer to STATS as one line, a part per region: "EU (normal): 12 online, 3 searching,
-# 2 matches | AS (duel): ...". Empty from an older server.
+# 2 matches | NA (normal): offline". A region whose state (the field after the name) is down takes
+# no new match (the game greys it out). Empty from an older server.
 function Format-Stats([string]$Reply) {
     if ($Reply -cne 'OK' -and $Reply -cnotmatch '^OK ') { return '' }
     $parts = @()
@@ -1030,6 +1031,7 @@ function Format-Stats([string]$Reply) {
         if ($name.Length -gt 40) { $name = $name.Substring(0, 40) }
         $name = ($name -replace '\s+SERVER$', '').Trim()
         if (-not $name) { $name = "zone $($fields[0])" }
+        if ($fields.Count -gt 6 -and $fields[6] -ceq 'down') { $parts += "$name ($($fields[1])): offline"; continue }
         $matchWord = if ([int]$fields[4] -eq 1) { 'match' } else { 'matches' }
         $parts += "$name ($($fields[1])): $([int]$fields[2]) online, $([int]$fields[3]) searching, $([int]$fields[4]) $matchWord"
     }
@@ -2463,6 +2465,17 @@ function Set-Text($Control, [string]$Text, [string]$Level = 'info') {
     $Control.Text = $Text
     $Control.Foreground = Get-Brush $Level
 }
+# The server line: one region per line, an offline one (Format-Stats) greyed.
+function Set-StatsText($Control, [string]$Text, [string]$Level = 'info') {
+    Set-Text $Control '' $Level
+    $lines = @($Text -split "`n")
+    for ($i = 0; $i -lt $lines.Count; ++$i) {
+        if ($i) { $Control.Inlines.Add((New-Object Windows.Documents.LineBreak)) }
+        $run = New-Object Windows.Documents.Run $lines[$i]
+        if ($lines[$i] -match '\): offline\.?$') { $run.Foreground = Get-Brush 'muted' }
+        $Control.Inlines.Add($run)
+    }
+}
 # A line for the player: the status, the details and the log.
 function Add-Line([string]$Text, [string]$Level = 'info') {
     if ($Level -ne 'info') { Write-GuiLog "[$Level] $Text" } else { Write-GuiLog $Text }
@@ -2524,7 +2537,7 @@ function Receive-GuiEvents {
             switch ($item.Kind) {
                 'line' { Add-Line $item.Data.Text $item.Data.Level }
                 'ask' { Show-Question $item.Data }
-                'stats' { Set-Text $gui.C.ServerStats $item.Data }
+                'stats' { Set-StatsText $gui.C.ServerStats $item.Data }
                 'game' {
                     $gui.GameRunning = $true
                     Update-Controls
@@ -2698,7 +2711,7 @@ function Show-ServerInfo($Done) {
         if (Set-ServerName $servers $server $contact.Name) { Update-Settings @{ servers = $servers }; Update-ServerList $server }
     }
     $line = Get-ServerInfoText $contact
-    Set-Text $gui.C.ServerStats $line.Text $line.Level
+    Set-StatsText $gui.C.ServerStats $line.Text $line.Level
     if (-not $gui.Playing) {
         $index = $gui.C.AccountBox.SelectedIndex
         Update-AccountList
