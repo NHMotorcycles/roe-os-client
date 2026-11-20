@@ -11,8 +11,7 @@ share the settings, accounts and keys. Its batch part decides:
 - **The window** when it has no arguments and was not typed in a command prompt: a double-click
   (Explorer runs `cmd.exe /c ""...\join.cmd" "`), a shortcut, or `.\join.cmd` from PowerShell
   all start cmd.exe with `/c`, a command prompt's own cmd.exe has none. `join.cmd --window`
-  forces it. The window runs in a hidden PowerShell (`-WindowStyle Hidden -STA`), so no console
-  stays open. `--window` with more after it (Steam's launch option `"<join.cmd>" --window
+  forces it. The window hides its PowerShell's console itself, so no console stays open. `--window` with more after it (Steam's launch option `"<join.cmd>" --window
   %command%`) is the window too, and then the batch part waits for it instead of `start`ing it,
   so the process Steam started lives as long as the game. The window hides the console it was
   started from (cmd.exe's in that case); in Windows Terminal, which only minimizes for that, it
@@ -20,6 +19,13 @@ share the settings, accounts and keys. Its batch part decides:
 - **The console** with any argument (`-Server`, `-Name`, `firewall`, `voice`, `export`,
   `import`, `admin`), or typed in a command prompt without arguments. `join.cmd --console`
   forces it, for example from PowerShell.
+
+PowerShell runs a script file (`-File`) only when its name ends in `.ps1`, so the batch part first
+writes its own text as `%APPDATA%\roe-join\run-<number>.ps1` (with `type`: `copy` would take a
+download's mark along, which `-ExecutionPolicy RemoteSigned` refuses) and runs that; the script
+removes copies older than 10 minutes. The firewall step runs as administrator the same way: a
+`.ps1` copy of join.cmd with `-FirewallStep <file>`, the file naming the rules to create and
+remove (JSON, no code).
 
 The window's questions are dialogs, the messages go to its status line, its log is
 `%APPDATA%\roe-join\gui.log`. join-gui.cmd (until 0.9 the window, needing join.cmd next to it)

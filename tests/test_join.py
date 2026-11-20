@@ -1136,8 +1136,11 @@ class JoinCmdStart(unittest.TestCase):
     the console with arguments, --console or typed in a prompt."""
     def run_batch(self, base, line):
         # The line typed into a command prompt (cmd.exe without /c); cmd /c ""<file>" " is how
-        # Explorer starts a double-clicked file.
-        result = subprocess.run(['cmd.exe'], cwd=str(base), input=line + '\r\nexit\r\n', capture_output=True, text=True, timeout=30)
+        # Explorer starts a double-clicked file. APPDATA in the test folder: the batch part writes
+        # its .ps1 copy there.
+        appdata = subprocess.run(['wslpath', '-w', str(base)], capture_output=True, text=True, check=True).stdout.strip()
+        result = subprocess.run(['cmd.exe'], cwd=str(base), input=f'set "APPDATA={appdata}"\r\n' + line + '\r\nexit\r\n',
+                                capture_output=True, text=True, timeout=30)
         return [line.strip() for line in result.stdout.splitlines() if line.strip().startswith('MODE ')]
 
     def test_window_or_console(self):
@@ -1174,6 +1177,10 @@ class JoinCmdStart(unittest.TestCase):
             # The window's launch option ("<join.cmd>" --window %command%): the window, waited for.
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window {steam} -windowed"'), [f'MODE window-wait [--window {steam} -windowed]'])
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --windowed"'), ['MODE console [--windowed]'])
+            # PowerShell runs a .ps1 copy of the file (-File), written without the download's mark.
+            copies = list((base / 'roe-join').glob('run-*.ps1'))
+            self.assertTrue(copies)
+            self.assertEqual(copies[0].read_bytes(), (base / 'join.cmd').read_bytes())
 
 
 # A localconfig.vdf as Steam writes it (tabs, LF), cut down: the game's block without launch

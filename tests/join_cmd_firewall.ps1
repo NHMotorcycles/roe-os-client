@@ -120,34 +120,37 @@ $advice = @(Get-FirewallAdvice 'C:\Downloads\join.cmd' @() $false)
 Check 'advice: run as administrator' (($advice -join "`n") -match 'Right-click join.cmd > Run as administrator' -and ($advice -join "`n") -match '"C:\\Downloads\\join.cmd"' -and ($advice -join "`n") -notmatch 'policy')
 $advice = @(Get-FirewallAdvice 'C:\Downloads\join.cmd' @($policy) $true)
 Check 'advice: elevated, policy rule' (($advice -join "`n") -match 'already runs as administrator' -and ($advice -join "`n") -match 'policy or security product' -and ($advice -join "`n") -notmatch 'Right-click')
-# The step itself, without a prompt: run directly it finds no administrator rights (as with User
-# Account Control off on a standard account) unless the test runs elevated; a declined prompt.
+# The step itself, without a prompt: a .ps1 copy of join.cmd with -FirewallStep; run directly it
+# finds no administrator rights (as with User Account Control off on a standard account) unless the
+# test runs elevated; a declined prompt.
+$env:ROE_JOIN_SELF = $Source
 $admin = Test-Administrator
-$direct = Invoke-Elevated @('Write-Output fine') $true
+$nothing = [pscustomobject]@{ Create = @(); Remove = @('ROE2022-test-none') }
+$direct = Invoke-Elevated $nothing $true
 Check 'direct step' ($(if ($admin) { $direct.Ok -and $direct.Reason -eq 'done' } else { -not $direct.Ok -and $direct.Reason -eq 'not-admin' }))
 if ($admin) {
-    $failed = Invoke-Elevated @('throw ''no rules''') $true
-    Check 'failed step' (-not $failed.Ok -and $failed.Reason -eq 'failed' -and $failed.Detail -eq 'no rules')
+    $failed = Invoke-Elevated ([pscustomobject]@{ Create = @([pscustomobject]@{ Name = 'ROE2022-test-bad'; Group = 'ROE2022-test'; Description = 'x'; Program = 'C:\x.exe'; RemoteAddress = @('no address') }); Remove = @() }) $true
+    Check 'failed step' (-not $failed.Ok -and $failed.Reason -eq 'failed' -and $failed.Detail)
 } else { Check 'failed step (needs an elevated test run)' $true }
 function Start-Process { throw (New-Object InvalidOperationException 'canceled', (New-Object ComponentModel.Win32Exception 1223)) }
-$declined = Invoke-Elevated @('Write-Output fine') $false
+$declined = Invoke-Elevated $nothing $false
 function Start-Process { throw (New-Object InvalidOperationException 'no shell', (New-Object ComponentModel.Win32Exception 2)) }
-$broken = Invoke-Elevated @('Write-Output fine') $false
+$broken = Invoke-Elevated $nothing $false
 Remove-Item Function:\Start-Process
 Check 'declined or not started' ($declined.Reason -eq 'declined' -and -not $declined.Ok -and $broken.Reason -eq 'no-start' -and $broken.Detail -eq 'no shell')
-Check 'temp files removed' (-not @(Get-ChildItem -LiteralPath $env:TEMP -Filter 'roe-join-firewall-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-1) }).Count)
+Check 'step files removed' (-not @(Get-ChildItem -LiteralPath (Join-Path $env:APPDATA 'roe-join') -Filter 'firewall-step-*' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-1) }).Count)
 
 # The rules themselves: one per program, the servers in the description, addresses only (no
 # ports or protocols), the old rules removed after the new ones exist.
-$global:Lines = @()
-function Invoke-Elevated([string[]]$Lines) { $global:Lines = $Lines; return [pscustomobject]@{ Ok = $true; Reason = 'done'; Detail = '' } }
+$global:Plan = $null
+function Invoke-Elevated($Plan) { $global:Plan = ConvertTo-Json -InputObject $Plan -Depth 5 | ConvertFrom-Json; return [pscustomobject]@{ Ok = $true; Reason = 'done'; Detail = '' } }
 $folder = [pscustomobject]@{ Group = 'ROE2022-join-abc'; Own = @([pscustomobject]@{ Name = 'old-1' }); Other = @([pscustomobject]@{ Name = '{x}'; Local = $true }) }
 $ok = (Set-FolderRules @('C:\Game\Europa_Client.exe', 'C:\Game\Other.exe') $folder @('198.51.100.7', '2001:db8::9')).Ok
-$new = @($global:Lines | Where-Object { $_ -match 'New-NetFirewallRule' })
-Check 'foreign block rule removed' ([bool]($global:Lines | Where-Object { $_ -match "Remove-NetFirewallRule -Name '\{x\}'" }))
-Check 'rules by address' ($ok -and $new.Count -eq 2 -and -not ($new | Where-Object { $_ -match 'Port|Protocol' }) -and
-    ($new[0] -match "-Description 'servers 198\.51\.100\.7 2001:db8::9'") -and ($new[0] -match '-RemoteAddress @\(') -and
-    ($global:Lines | Where-Object { $_ -match "Remove-NetFirewallRule -Name 'old-1'" }))
+$new = @($global:Plan.Create)
+Check 'foreign block rule removed' (@($global:Plan.Remove) -contains '{x}')
+Check 'rules by address' ($ok -and $new.Count -eq 2 -and $new[1].Program -eq 'C:\Game\Other.exe' -and $new[0].Group -eq 'ROE2022-join-abc' -and $new[0].Name -like 'ROE2022-join-abc-*-0' -and
+    $new[0].Description -eq 'servers 198.51.100.7 2001:db8::9' -and @($new[0].RemoteAddress).Count -gt 1 -and (Test-Blocked @($new[0].RemoteAddress) '203.0.113.5') -and
+    -not (Test-Blocked @($new[0].RemoteAddress) '198.51.100.7') -and @($global:Plan.Remove) -contains 'old-1')
 
 # The firewall step as a function: with the real firewall replaced, which rules it sets and what it
 # leaves to check.

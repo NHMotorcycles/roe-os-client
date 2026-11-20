@@ -7,6 +7,11 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- join.cmd starts PowerShell in a plainer way, so that virus scanners take it less often for
+  malware: it runs a `.ps1` copy of itself (`%APPDATA%\roe-join\run-*.ps1`, removed again
+  later) with `-ExecutionPolicy RemoteSigned` instead of reading its own text with
+  `-ExecutionPolicy Bypass -WindowStyle Hidden`, and the firewall step as administrator reads the
+  rules from a data file instead of running generated script text. Everything works as before.
 - Started through Steam, no empty console window stays open while the game runs: the window
   hides the console it was started from (also in Windows Terminal, the default terminal on
   Windows 11, which before only minimized it, or not at all). Steam still sees the game running

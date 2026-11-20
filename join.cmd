@@ -5,12 +5,19 @@ set "ROE_JOIN_SELF=%~f0"
 set "ROE_JOIN_ARGS=%*"
 set "ROE_JOIN_WINDOW="
 set "ROE_JOIN_WAIT="
+rem PowerShell runs a script file only when it ends in .ps1: this file's text as one in
+rem %APPDATA%\roe-join (type, not copy: copy would take a download's mark along, and PowerShell
+rem would refuse it). The script removes older ones.
+if not exist "%APPDATA%\roe-join\" mkdir "%APPDATA%\roe-join"
+set "ROE_JOIN_PS1=%APPDATA%\roe-join\run-%RANDOM%%TIME:~-2%%RANDOM%.ps1"
+type "%~f0" > "%ROE_JOIN_PS1%" || goto :no_script
 setlocal EnableDelayedExpansion
 rem The window: no arguments and not typed in a command prompt (a double-click, a shortcut and
 rem PowerShell run cmd.exe /c "...join.cmd"; the cmd.exe of a prompt has no /c), or --window.
 rem A copy of cmdcmdline: the dynamic variable itself takes no :old=new.
 rem --window with more after it (Steam's launch option "<join.cmd>" --window %command%): the window
 rem with that command line, and this waits for it, so Steam sees the game running until it exits.
+rem The window hides this console itself.
 set "ROE_JOIN_LINE=!cmdcmdline!"
 if not defined ROE_JOIN_ARGS (
   if /i not "!ROE_JOIN_LINE: /c=!"=="!ROE_JOIN_LINE!" set "ROE_JOIN_WINDOW=1"
@@ -21,20 +28,24 @@ if not defined ROE_JOIN_ARGS (
   set "ROE_JOIN_WAIT=1"
 )
 if defined ROE_JOIN_WAIT (
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -Command ". ([ScriptBlock]::Create([IO.File]::ReadAllText($env:ROE_JOIN_SELF)))"
+  powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "!ROE_JOIN_PS1!"
   exit /b 0
 )
 if defined ROE_JOIN_WINDOW (
-  start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -Command ". ([ScriptBlock]::Create([IO.File]::ReadAllText($env:ROE_JOIN_SELF)))"
+  start "" /min powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "!ROE_JOIN_PS1!"
   exit /b 0
 )
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((Get-Content -LiteralPath $env:ROE_JOIN_SELF -Raw)))"
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "!ROE_JOIN_PS1!"
 set "ROE_JOIN_EXIT=!ERRORLEVEL!"
 if not "!ROE_JOIN_EXIT!"=="0" (
   echo.
   pause
 )
 exit /b !ROE_JOIN_EXIT!
+:no_script
+echo join.cmd could not write its script into "%APPDATA%\roe-join".
+pause
+exit /b 1
 #>
 
 # Join a Ring of Elysium 2022 server (roe_server) as a player.
@@ -126,6 +137,9 @@ exit /b !ROE_JOIN_EXIT!
 #
 # Nothing else in the game folder is changed.
 
+# The administrator step of the firewall rules: join.cmd starts this file (a .ps1 copy of it) as
+# administrator with -FirewallStep and a file that names the rules to create and remove.
+param([string]$FirewallStep = '')
 $ErrorActionPreference = 'Stop'
 # Tested Europa_Client.exe builds of 2022-0.2.989.0 x64: the root folder (DX11) and XVersion (DX12).
 $expectedSha = @('2dca9b1e122e21363e14eeeb2372598c773205a907ed8d2b2d54a7229ad6ba18', 'e076dddcab4b48d52b920a84bbee125c8b452900ae90cea2f190f2e3654ff81d')
@@ -318,25 +332,30 @@ function Assert-GameClosed([string[]]$Programs) {
 function Test-Administrator {
     try { return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { return $false }
 }
-# Runs the lines as administrator: directly when join.cmd runs as one, else through a Windows
-# prompt. Returns Ok and Reason: done; declined (the prompt said no, or Windows denies it on this
-# account); not-admin (it ran without administrator rights, User Account Control off on a
-# standard account); failed (Detail: the error); no-start (Windows did not start it).
-function Invoke-Elevated([string[]]$Lines, [bool]$Admin = (Test-Administrator)) {
+# Runs a firewall step as administrator: directly when join.cmd runs as one, else through a
+# Windows prompt. The step is data (Create: rules with Name, Group, Description, Program and
+# RemoteAddress; Remove: rule names) in a file that a .ps1 copy of join.cmd reads with
+# -FirewallStep (Invoke-FirewallStep). Returns Ok and Reason: done; declined (the prompt said no,
+# or Windows denies it on this account); not-admin (it ran without administrator rights, User
+# Account Control off on a standard account); failed (Detail: the error); no-start (Windows did
+# not start it).
+function Invoke-Elevated($Plan, [bool]$Admin = (Test-Administrator)) {
+    $folder = Join-Path $env:APPDATA 'roe-join'
+    if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder | Out-Null }
     $id = [Guid]::NewGuid().ToString('N')
-    $script = Join-Path $env:TEMP "roe-join-firewall-$id.ps1"
-    $log = Join-Path $env:TEMP "roe-join-firewall-$id.log"
-    $body = @("`$log = '$($log.Replace("'", "''"))'",
-        'if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { exit 3 }',
-        'try {') + @($Lines | ForEach-Object { '    ' + $_ }) + @('} catch { Set-Content -LiteralPath $log -Value "$_"; exit 1 }', 'exit 0')
-    Set-Content -LiteralPath $script -Value $body -Encoding UTF8
+    $step = Join-Path $folder "firewall-step-$id.json"
+    $script = Join-Path $folder "firewall-step-$id.ps1"
+    $log = "$step.log"
     $code = $null
     try {
+        Set-Content -LiteralPath $step -Value (ConvertTo-Json -InputObject $Plan -Depth 5) -Encoding UTF8
+        # The bytes only: File.Copy would take a download's mark along, and PowerShell would refuse it.
+        [IO.File]::WriteAllBytes($script, [IO.File]::ReadAllBytes($env:ROE_JOIN_SELF))
         if ($Admin) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script | Out-Host
+            & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $script -FirewallStep $step | Out-Host
             $code = $LASTEXITCODE
         } else {
-            $code = (Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$script`"")).ExitCode
+            $code = (Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', "`"$script`"", '-FirewallStep', "`"$step`"")).ExitCode
         }
     } catch {
         $native = $_.Exception.InnerException.NativeErrorCode
@@ -344,13 +363,38 @@ function Invoke-Elevated([string[]]$Lines, [bool]$Admin = (Test-Administrator)) 
         $reason = if ($native -eq 1223 -or ($null -eq $native -and $_.Exception.Message -match 'cancel')) { 'declined' } else { 'no-start' }
         return [pscustomobject]@{ Ok = $false; Reason = $reason; Detail = $_.Exception.Message }
     } finally {
-        Remove-Item -LiteralPath $script -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $script, $step -ErrorAction SilentlyContinue
     }
     $detail = ''
     if (Test-Path -LiteralPath $log) { $detail = "$(Get-Content -LiteralPath $log -Raw)".Trim(); Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue }
     if ($code -eq 0) { return [pscustomobject]@{ Ok = $true; Reason = 'done'; Detail = '' } }
     if ($code -eq 3) { return [pscustomobject]@{ Ok = $false; Reason = 'not-admin'; Detail = '' } }
     return [pscustomobject]@{ Ok = $false; Reason = 'failed'; Detail = $detail }
+}
+# The step itself, in the administrator's PowerShell: creates the rules of the file at Path (if one
+# fails, the ones it created go again and nothing is removed), then removes the named rules.
+# Returns the exit code: 0 done, 1 failed (the error in Path.log), 3 no administrator rights.
+function Invoke-FirewallStep([string]$Path) {
+    if (-not (Test-Administrator)) { return 3 }
+    $created = @()
+    try {
+        $plan = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+        try {
+            foreach ($rule in @($plan.Create | Where-Object { $_ })) {
+                New-NetFirewallRule -Name $rule.Name -DisplayName $rule.Name -Group $rule.Group -Description $rule.Description -Direction Outbound -Action Block `
+                    -Program $rule.Program -RemoteAddress @($rule.RemoteAddress) -Profile Any -Enabled True | Out-Null
+                $created += $rule.Name
+            }
+        } catch {
+            foreach ($name in $created) { Remove-NetFirewallRule -Name $name -ErrorAction SilentlyContinue }
+            throw
+        }
+        foreach ($name in @($plan.Remove | Where-Object { $_ })) { Remove-NetFirewallRule -Name $name -ErrorAction SilentlyContinue }
+    } catch {
+        Set-Content -LiteralPath "$Path.log" -Value "$_"
+        return 1
+    }
+    return 0
 }
 # What went wrong in the administrator step, in words. Empty when it worked.
 function Get-ElevationNote($Result) {
@@ -428,8 +472,8 @@ function Get-FirewallAdvice([string]$Self, $Blocking, [bool]$Admin) {
     $lines += 'Or turn the rules off with "join.cmd firewall off" (then the game can reach the internet).'
     return $lines
 }
-function Get-RemoveLines($Rules) {
-    return @($Rules | Where-Object { $_ } | ForEach-Object { "Remove-NetFirewallRule -Name '" + $_.Name.Replace("'", "''") + "' -ErrorAction SilentlyContinue" })
+function Get-RuleNames($Rules) {
+    return [string[]]@($Rules | Where-Object { $_ } | ForEach-Object { $_.Name })
 }
 # A folder's rules of this launcher (Own), and others that block one of its programs (Other):
 # the server launcher's for this folder, ones made for another folder, or local block rules of
@@ -518,25 +562,20 @@ function Show-Firewall([string]$Client, $Firewall) {
 # and the old ones stay.
 function Set-FolderRules([string[]]$Programs, $Folder, [string[]]$Trusted) {
     $wanted = 'servers ' + ($Trusted -join ' ')
-    $ranges = (Get-BlockedRanges $Trusted | ForEach-Object { "'" + $_ + "'" }) -join ','
+    $ranges = [string[]]@(Get-BlockedRanges $Trusted)
     $generation = [DateTime]::UtcNow.ToString('yyMMddHHmmss')
-    $lines = @('$ErrorActionPreference = ''Stop''', '$created = @()', 'try {')
+    $create = @()
     for ($index = 0; $index -lt $Programs.Count; $index++) {
-        $name = "$($Folder.Group)-$generation-$index"
-        $lines += ("    New-NetFirewallRule -Name '$name' -DisplayName '$name' -Group '$($Folder.Group)' -Description '$wanted' " +
-            "-Direction Outbound -Action Block -Program '" + $Programs[$index].Replace("'", "''") + "' -RemoteAddress @($ranges) -Profile Any -Enabled True | Out-Null")
-        $lines += "    `$created += '$name'"
+        $create += [pscustomobject]@{ Name = "$($Folder.Group)-$generation-$index"; Group = $Folder.Group; Description = $wanted; Program = $Programs[$index]; RemoteAddress = $ranges }
     }
-    $lines += @(Get-RemoveLines (@($Folder.Own) + @($Folder.Other)) | ForEach-Object { '    ' + $_ })
-    $lines += @('} catch {', '    foreach ($name in $created) { Remove-NetFirewallRule -Name $name -ErrorAction SilentlyContinue }', '    throw', '}')
-    return Invoke-Elevated $lines
+    return Invoke-Elevated ([pscustomobject]@{ Create = $create; Remove = (Get-RuleNames (@($Folder.Own) + @($Folder.Other))) })
 }
 function Remove-Rules($Rules, [string]$What) {
     $Rules = @($Rules | Where-Object { $_ })
     if (-not $Rules.Count) { Write-Host "No firewall rules $What."; return }
     $prompt = if (Test-Administrator) { '' } else { ' (a Windows prompt appears)' }
     Write-Host "Removing $($Rules.Count) firewall rules $What$prompt."
-    $step = Invoke-Elevated (@('$ErrorActionPreference = ''Continue''') + @(Get-RemoveLines $Rules))
+    $step = Invoke-Elevated ([pscustomobject]@{ Create = @(); Remove = (Get-RuleNames $Rules) })
     if (-not $step.Ok) { throw ('The firewall rules were not removed. ' + (Get-ElevationNote $step)) }
     Write-Host 'Removed.'
 }
@@ -3183,6 +3222,10 @@ function Start-Gui([string]$Code) {
 }
 
 # === Main part ================================================================================
+if ($FirewallStep) { exit (Invoke-FirewallStep $FirewallStep) }
+# The .ps1 copies the batch part writes (run-*.ps1), once PowerShell has read them.
+Get-ChildItem -LiteralPath (Join-Path $env:APPDATA 'roe-join') -Filter 'run-*.ps1' -ErrorAction SilentlyContinue |
+    Where-Object { $_.CreationTimeUtc -lt [DateTime]::UtcNow.AddMinutes(-10) } | Remove-Item -ErrorAction SilentlyContinue
 # The window (ROE_JOIN_WINDOW from the batch part: no arguments, or --window).
 if ($env:ROE_JOIN_WINDOW) {
     try {
@@ -3192,7 +3235,9 @@ if ($env:ROE_JOIN_WINDOW) {
         $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]' })
         $gui = @{}
         $joinCode = Get-JoinCode $env:ROE_JOIN_SELF
-        . ([ScriptBlock]::Create($joinCode))
+        # This thread has the functions already; only Write-Host and Ask become the window's.
+        Set-Item -Path function:Write-Host -Value ${function:Write-GuiHost}
+        Set-Item -Path function:Ask -Value ${function:Read-GuiAnswer}
         Start-Gui $joinCode
     } catch {
         $message = Get-ErrorMessage $_
