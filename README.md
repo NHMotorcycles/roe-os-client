@@ -28,6 +28,21 @@ Everything is saved, so next time it's just **Play**.
 
 > **Played with other launchers before?** Many of them change your game files without asking. join.cmd checks this before every start: if it says your game files were changed, verify them in Steam (**Ring of Elysium > Properties > Installed Files > Verify integrity of game files**) and start again.
 
+## :arrow_forward: Start through Steam
+
+Want Steam's **Play** button, overlay and playtime? Play once with join.cmd as above, then:
+
+1. Open a command prompt in the folder of join.cmd and run `join.cmd steam-setup`.
+2. It shows a line like `"C:\...\join.cmd" %command%`. Exit Steam (Steam > Exit) and answer
+   **y**: it puts the line into Steam for you. Or copy it into **Ring of Elysium > Properties >
+   General > Launch options** yourself (Steam may stay open for that).
+3. Press **Play** in Steam. A console window logs in with the server and account you used last
+   and starts the game. Leave it open while you play.
+
+To always use one account: `join.cmd -Server roe-os.de -Name YourName steam-setup`. To undo:
+`join.cmd steam-setup off`, or empty the launch options in Steam. Don't move join.cmd afterwards
+(or run steam-setup again). Linux: `python3 join.py --steam-setup`.
+
 ## :globe_with_meridians: Our Server
 
 ### roe-os.de

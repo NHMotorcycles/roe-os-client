@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 JOIN = Path(__file__).resolve().parents[1] / 'join.py'
@@ -1161,6 +1162,258 @@ class JoinCmdStart(unittest.TestCase):
             self.assertEqual(self.run_batch(base, f'"{path}"'), ['MODE console []'])
             self.assertEqual(self.run_batch(base, f'"{path}" export'), ['MODE console [export]'])
             self.assertEqual(self.run_batch(base, f'"{path}" --window'), ['MODE window'])
+            # Started by Steam ("<join.cmd>" %command%): Windows runs a .cmd as cmd /c "<the line>".
+            steam = r'"C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\SLauncher.exe" -steam -maintenance'
+            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" {steam}"'), [f'MODE console [{steam}]'])
+
+
+# A localconfig.vdf as Steam writes it (tabs, LF), cut down: the game's block without launch
+# options, another game's with some, and a "755790" elsewhere that must stay.
+SAMPLE_VDF = '''"UserLocalConfigStore"
+{
+\t"friends"
+\t{
+\t\t"755790"\t\t"not this one"
+\t}
+\t// a comment
+\t"Software"
+\t{
+\t\t"Valve"
+\t\t{
+\t\t\t"Steam"
+\t\t\t{
+\t\t\t\t"apps"
+\t\t\t\t{
+\t\t\t\t\t"730"
+\t\t\t\t\t{
+\t\t\t\t\t\t"LaunchOptions"\t\t"-novid \\"quoted\\" C:\\\\x"
+\t\t\t\t\t}
+\t\t\t\t\t"755790"
+\t\t\t\t\t{
+\t\t\t\t\t\t"LastPlayed"\t\t"1795123896"
+\t\t\t\t\t\t"Playtime"\t\t"60437"
+\t\t\t\t\t}
+\t\t\t\t}
+\t\t\t}
+\t\t}
+\t}
+}
+'''
+STEAM_LINE = r'"C:\Users\A B\Desktop\join.cmd" %command%'
+
+
+def steam_tree(home, vdf=SAMPLE_VDF, user='30642568'):
+    """A Steam folder in home with one user's localconfig.vdf and loginusers.vdf; the file's path."""
+    root = home / '.local/share/Steam'
+    path = touch(root / f'userdata/{user}/config/localconfig.vdf')
+    path.write_bytes(vdf.encode('utf-8'))
+    touch(root / 'config/loginusers.vdf', '"users"\n{\n\t"%d"\n\t{\n\t\t"PersonaName"\t\t"Anna"\n\t\t"MostRecent"\t\t"1"\n'
+          '\t\t"Timestamp"\t\t"1795073593"\n\t}\n}\n' % (int(user) + join.STEAM_ID64_BASE))
+    return path
+
+
+class SteamLaunch(unittest.TestCase):
+    """Started through Steam: Steam's command, the game folder, the Steam profile and the launch
+    options in localconfig.vdf (round trip, only that key, backup, Steam running)."""
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_steam_command(self):
+        game = '/home/a/.local/share/Steam/steamapps/common/Ring of Elysium'
+        command = ['/home/a/.local/share/Steam/ubuntu12_32/reaper', 'SteamLaunch', 'AppId=755790', '--',
+                   '/x/SteamLinuxRuntime_sniper/_v2-entry-point', '--verb=waitforexitandrun', '--',
+                   '/x/Proton 9.0/proton', 'waitforexitandrun', f'{game}/SLauncher.exe', '-steam', '-maintenance', '-windowed']
+        ours, steam = join.split_steam_command(['--server', 'roe-os.de', '--steam'] + command)
+        self.assertEqual((ours, steam), (['--server', 'roe-os.de'], command))
+        self.assertEqual(join.split_steam_command(['--voice', 'off']), (['--voice', 'off'], None))
+        index, folder = join.steam_game(command)
+        self.assertEqual((index, folder), (9, game))
+        self.assertEqual(join.steam_game(['C:\\Games\\Ring of Elysium\\europa_client.EXE'])[0], 0)
+        self.assertEqual(join.steam_game(['proton', 'run', 'other.exe']), (None, None))
+        started = join.steam_game_command(command, index, game + '/XVersion', ['-uid=7', '-server=1.2.3.4:8001'])
+        self.assertEqual(started, command[:9] + [f'{game}/XVersion/Europa_Client.exe', '-uid=7', '-server=1.2.3.4:8001', '-windowed'])
+
+    def test_steam_client(self):
+        game = self.base / 'common/Ring of Elysium'
+        touch(game / 'Europa_Client.exe')
+        touch(game / 'XVersion/Europa_Client.exe')
+        touch(self.base / 'other/Europa_Client.exe')
+        self.assertEqual(join.steam_client(str(game), ''), str(game.resolve()))
+        self.assertEqual(join.steam_client(str(game), str(game / 'XVersion')), str((game / 'XVersion').resolve()))
+        self.assertEqual(join.steam_client(str(game), str(self.base / 'other')), str(game.resolve()))
+
+    def test_steam_profile(self):
+        accounts = [{'name': 'Anna', 'token': 'a' * 64, 'last_used': 9}, {'name': 'Bob', 'token': 'b' * 64, 'last_used': 5}]
+        self.assertEqual(join.account_id('a' * 64), 'ffe054fe7ae0cb6d')   # join.cmd's Get-AccountId agrees
+        settings = {'servers': [{'address': 'old.example', 'last_used': 1}, {'address': 'new.example', 'last_used': 7}]}
+        self.assertEqual(join.steam_server(settings), 'new.example')
+        self.assertEqual(join.steam_server(settings, 'given.example'), 'given.example')
+        self.assertEqual(join.steam_server({}), '')
+        self.assertEqual(join.steam_account(settings, 'new.example', accounts), (True, accounts[0]))
+        self.assertEqual(join.steam_account(settings, 'new.example', []), (True, None))
+        settings['steam'] = {'server': 'old.example', 'account': join.account_id('b' * 64)}
+        self.assertEqual(join.steam_server(settings), 'old.example')
+        self.assertEqual(join.steam_account(settings, 'old.example', accounts), (True, accounts[1]))
+        self.assertEqual(join.steam_account(settings, 'old.example', accounts[:1]), (False, None))
+        self.assertEqual(join.steam_account(settings, 'new.example', accounts), (True, accounts[0]))
+
+    def test_vdf_round_trip(self):
+        self.assertIsNone(join.launch_options(SAMPLE_VDF))
+        self.assertEqual(join.launch_options(SAMPLE_VDF, '730'), '-novid "quoted" C:\\x')
+        added = join.set_launch_options(SAMPLE_VDF, STEAM_LINE)
+        self.assertEqual(join.launch_options(added), STEAM_LINE)
+        # Only one line more, in the game's block, escaped as Steam does.
+        line = '\t\t\t\t\t\t"LaunchOptions"\t\t"\\"C:\\\\Users\\\\A B\\\\Desktop\\\\join.cmd\\" %command%"\n'
+        self.assertEqual(added, SAMPLE_VDF.replace('"60437"\n', '"60437"\n' + line))
+        changed = join.set_launch_options(added, '-dx11')
+        self.assertEqual(changed, SAMPLE_VDF.replace('"60437"\n', '"60437"\n\t\t\t\t\t\t"LaunchOptions"\t\t"-dx11"\n'))
+        self.assertEqual(join.set_launch_options(changed, None), SAMPLE_VDF)
+        self.assertEqual(join.set_launch_options(SAMPLE_VDF, None), SAMPLE_VDF)
+        self.assertEqual(join.launch_options(changed, '730'), '-novid "quoted" C:\\x')
+        # CRLF stays CRLF.
+        crlf = SAMPLE_VDF.replace('\n', '\r\n')
+        self.assertEqual(join.set_launch_options(crlf, '-x'), crlf.replace('"60437"\r\n', '"60437"\r\n\t\t\t\t\t\t"LaunchOptions"\t\t"-x"\r\n'))
+        self.assertEqual(join.set_launch_options(join.set_launch_options(crlf, '-x'), None), crlf)
+        # No block for the game yet (never started): added in apps; no apps: added too.
+        other = SAMPLE_VDF.replace('755790"\n\t\t\t\t\t{', '228980"\n\t\t\t\t\t{')
+        made = join.set_launch_options(other, '-x')
+        self.assertEqual(join.launch_options(made), '-x')
+        self.assertEqual(made, other.replace('\t\t\t\t}\n\t\t\t}\n', '\t\t\t\t\t"755790"\n\t\t\t\t\t{\n\t\t\t\t\t\t"LaunchOptions"\t\t"-x"\n'
+                                                             '\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n', 1))
+        bare = '"UserLocalConfigStore"\n{\n\t"x"\t\t"1"\n}\n'
+        self.assertEqual(join.launch_options(join.set_launch_options(bare, '-x')), '-x')
+        with self.assertRaises(ValueError):
+            join.set_launch_options('"Other"\n{\n}\n', '-x')
+        for damaged in ('"UserLocalConfigStore"\n{\n', '"UserLocalConfigStore"\n{\n}\n}\n', '"a" "b" "c"\n', '"open'):
+            with self.assertRaises(ValueError, msg=damaged):
+                join.vdf_parse(damaged)
+
+    def test_write_backup(self):
+        path = steam_tree(self.base)
+        backup = join.write_launch_options(path, STEAM_LINE, now=1795000000)
+        self.assertEqual(backup.read_bytes(), SAMPLE_VDF.encode('utf-8'))
+        self.assertTrue(backup.name.startswith('localconfig.vdf.') and backup.name.endswith('.roe-join.bak'))
+        self.assertEqual(join.launch_options(path.read_text(encoding='utf-8')), STEAM_LINE)
+        self.assertIsNone(join.write_launch_options(path, STEAM_LINE))
+        self.assertEqual(len(list(path.parent.glob('*.bak'))), 1)
+        path.write_bytes(b'"UserLocalConfigStore"\n{\n\t"x"\t\t"\xff"\n}\n')
+        with self.assertRaises(join.Failure):
+            join.write_launch_options(path, STEAM_LINE)
+
+    def setup(self, *argv, running=False, answers=('y',)):
+        config = self.base / 'config'
+        options = join.parse_arguments(list(argv))
+        out = io.StringIO()
+        with unittest.mock.patch.object(join, 'CONFIG', config), unittest.mock.patch.object(join, 'SETTINGS', config / 'roe-join.json'), \
+                contextlib.redirect_stdout(out):
+            settings = {}
+            try:
+                join.steam_setup_command(options, settings, home=self.base / 'home', question=Answers(*answers),
+                                         running=lambda: running, script='/games/roe/join.py')
+            finally:
+                self.said = out.getvalue()
+        return settings
+
+    def test_setup(self):
+        path = steam_tree(self.base / 'home')
+        line = 'python3 "/games/roe/join.py" --steam %command%'
+        self.assertEqual(join.steam_launch_line('/games/roe/join.py'), line)
+        with self.assertRaises(join.Failure) as refused:
+            self.setup('--steam-setup', running=True)
+        self.assertIn('Steam is running', str(refused.exception))
+        self.assertIn(line, self.said)
+        self.assertEqual(path.read_bytes(), SAMPLE_VDF.encode('utf-8'))
+        self.assertEqual(list(path.parent.glob('*.bak')), [])
+        self.setup('--steam-setup', answers=('n',))
+        self.assertEqual(path.read_bytes(), SAMPLE_VDF.encode('utf-8'))
+        self.setup('--steam-setup')
+        self.assertEqual(join.launch_options(path.read_text(encoding='utf-8')), line)
+        self.assertIn('Set in Steam', self.said)
+        self.setup('--steam-setup', 'off')
+        self.assertEqual(path.read_bytes(), SAMPLE_VDF.encode('utf-8'))
+        # Someone else's launch options stay.
+        path.write_text(join.set_launch_options(SAMPLE_VDF, '-dx11'), encoding='utf-8')
+        self.setup('--steam-setup', 'off')
+        self.assertIn('not ours', self.said)
+        self.assertEqual(join.launch_options(path.read_text(encoding='utf-8')), '-dx11')
+
+    def test_setup_profile(self):
+        steam_tree(self.base / 'home')
+        join.save_accounts(self.base / 'config/roe-join/roe-os.de', [{'name': 'Anna', 'token': 'a' * 64, 'last_used': 1}])
+        settings = self.setup('--server', 'roe-os.de', '--name', 'anna', '--steam-setup', answers=('n',))
+        self.assertEqual(settings['steam'], {'server': 'roe-os.de', 'account': 'ffe054fe7ae0cb6d'})
+        self.assertEqual(json.loads((self.base / 'config/roe-join.json').read_text())['steam'], settings['steam'])
+        with self.assertRaises(join.Failure):
+            self.setup('--server', 'roe-os.de', '--name', 'Nobody', '--steam-setup', answers=('n',))
+        self.assertNotIn('steam', self.setup('--steam-setup', answers=('n',)))
+
+    def test_users(self):
+        steam_tree(self.base, user='30642568')
+        root = self.base / '.local/share/Steam'
+        touch(root / 'userdata/111/config/localconfig.vdf', '"UserLocalConfigStore"\n{\n}\n')
+        touch(root / 'userdata/ac/config/localconfig.vdf', '')
+        users = join.steam_users(root)
+        self.assertEqual([(u['id'], u['owns'], u['name']) for u in users], [('30642568', True, 'Anna'), ('111', False, '')])
+        self.assertEqual(join.choose_steam_user(users, choose=lambda entries: 1)['id'], '30642568')
+        both = [dict(u, owns=True) for u in users]
+        picked = []
+        self.assertEqual(join.choose_steam_user(both, choose=lambda entries: picked.append(entries) or 1)['id'], '111')
+        self.assertEqual(picked, [['Anna (30642568)', '111']])
+
+    def test_steam_running(self):
+        proc = self.base / 'proc'
+        touch(proc / '12/comm', 'bash\n')
+        self.assertFalse(join.steam_running(proc))
+        touch(proc / '13/comm', 'steam\n')
+        self.assertTrue(join.steam_running(proc))
+
+    def test_dry_run_from_steam(self):
+        home = self.base / 'home'
+        config = home / '.config'
+        config.mkdir(parents=True)
+        (config / 'roe-join.json').write_text(json.dumps({'voice': False, 'servers': [
+            {'address': '127.0.0.1', 'last_used': 20}, {'address': '127.0.0.2', 'last_used': 10}]}))
+        game = self.base / 'steamapps/common/Ring of Elysium'
+        touch(game / 'Europa_Client.exe', 'not the game')
+        env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(config), ROE_JOIN_DRY_RUN='1')
+        command = [sys.executable, '-I', str(JOIN), '--steam', '/x/proton', 'waitforexitandrun', str(game / 'SLauncher.exe'), '-steam', '-maintenance']
+        result = subprocess.run(command, env=env, input='', capture_output=True, text=True, timeout=30)
+        report = result.stdout + result.stderr
+        self.assertNotIn('Server:', result.stdout, report)
+        self.assertIn('Would log in to 127.0.0.1:8002 as a new account', result.stdout, report)
+        self.assertIn(f"Would run Steam's command (in the game folder): /x/proton waitforexitandrun '{game.resolve()}/Europa_Client.exe' "
+                      "-language=en -garena '-uid=<ticket>' -server=127.0.0.1:8001", result.stdout, report)
+        result = subprocess.run(command[:3] + ['--steam', 'proton', 'run', 'other.exe'], env=env, input='', capture_output=True, text=True, timeout=30)
+        self.assertIn('names no SLauncher.exe or Europa_Client.exe', result.stdout)
+
+
+@unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
+class JoinCmdSteam(unittest.TestCase):
+    """join.cmd's start through Steam: the command line, the game folder, the profile and the
+    launch options in localconfig.vdf, the same as join.py's (through powershell.exe)."""
+    def test_functions(self):
+        def prepare(base):
+            (base / 'sample.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
+            added = join.set_launch_options(SAMPLE_VDF, STEAM_LINE)
+            (base / 'added.vdf').write_bytes(added.encode('utf-8'))
+            other = SAMPLE_VDF.replace('755790"\n\t\t\t\t\t{', '228980"\n\t\t\t\t\t{')
+            (base / 'other.vdf').write_bytes(other.encode('utf-8'))
+            (base / 'other-added.vdf').write_bytes(join.set_launch_options(other, '-x').encode('utf-8'))
+            crlf = SAMPLE_VDF.replace('\n', '\r\n')
+            (base / 'crlf.vdf').write_bytes(crlf.encode('utf-8'))
+            (base / 'crlf-added.vdf').write_bytes(join.set_launch_options(crlf, '-x').encode('utf-8'))
+            steam = base / 'steam'
+            touch(steam / 'userdata/30642568/config/localconfig.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
+            touch(steam / 'userdata/111/config/localconfig.vdf', '"UserLocalConfigStore"\n{\n}\n')
+            touch(steam / 'config/loginusers.vdf', '"users"\n{\n\t"%d"\n\t{\n\t\t"PersonaName"\t\t"Anna"\n\t\t"MostRecent"\t\t"1"\n\t}\n}\n'
+                  % (30642568 + join.STEAM_ID64_BASE))
+            touch(base / 'game/Europa_Client.exe')
+            touch(base / 'game/XVersion/Europa_Client.exe')
+        run_powershell(self, 'join_cmd_steam.ps1', prepare, 32)
 
 
 if __name__ == '__main__':

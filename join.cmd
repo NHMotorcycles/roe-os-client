@@ -99,6 +99,11 @@ exit /b !ROE_JOIN_EXIT!
 # the browser with a one-time login link (ROLE, then WEB; the server sends the page's address or
 # it is https://admin.<the server's domain>). Other accounts are told they have no GM rights.
 #
+# Steam: with the launch option "<this file>" %command% Steam's Play button starts join.cmd with the
+# game's command line; it joins the server and account of join.cmd steam-setup (else the last used
+# ones) and starts the game itself. join.cmd [-Server <address>] [-Name <name>] steam-setup [off]
+# prints the line and sets (or removes) it in Steam while Steam is closed.
+#
 # Account backup: join.cmd export [FILE] writes every server's accounts (their keys), certificate
 # pin and name into one file (default roe-join-accounts.json here); join.cmd import FILE merges
 # one into this computer. join.py reads and writes the same file (--export, --import).
@@ -119,8 +124,12 @@ $joinRoot = Join-Path $env:APPDATA 'roe-join'
 
 # roe-join.json as the console and the window write it.
 function Save-JoinSettings([string]$Client, $Firewall, $Voice, $VoiceDll, $Servers) {
-    [pscustomobject]@{ client = $Client; firewall = $Firewall; voice = $Voice; voice_dll = $VoiceDll; servers = @($Servers) } |
-        ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+    $values = [ordered]@{ client = $Client; firewall = $Firewall; voice = $Voice; voice_dll = $VoiceDll; servers = @($Servers) }
+    # The Steam profile (join.cmd steam-setup) stays.
+    $steam = $null
+    try { if (Test-Path -LiteralPath $settingsPath) { $steam = (Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json).steam } } catch { }
+    if ($steam) { $values.steam = $steam }
+    [pscustomobject]$values | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
 }
 function Read-Settings {
     if (Test-Path -LiteralPath $settingsPath) {
@@ -1600,19 +1609,315 @@ function Request-AdminLink([string]$Ip, [string]$Folder, [string]$HostName, $Ent
 
 # Our voice DLL in (VoicePick: Get-VoiceChoice's Pick, $null: no voice), then the game, connected
 # to the server. Returns Process and VoiceOn: when true, Restore-Voice once the game exits.
-function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
+function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick, [string[]]$Extra = @()) {
     Write-Host ''
     Write-Host 'Starting the game.'
     $voiceOn = $false
     if ($VoicePick -and $VoicePick.Hash) { $voiceOn = Install-Voice $Client $VoicePick.Dll $VoicePick.Hash }
     try {
-        $game = Start-Process -FilePath (Join-Path $Client 'Europa_Client.exe') -WorkingDirectory $Client -PassThru `
-            -ArgumentList @('-language=en', '-garena', "-uid=$Uid", "-server=${Ip}:$lobbyPort")
+        $gameArgs = @('-language=en', '-garena', "-uid=$Uid", "-server=${Ip}:$lobbyPort") + @($Extra | Where-Object { $_ } | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
+        $game = Start-Process -FilePath (Join-Path $Client 'Europa_Client.exe') -WorkingDirectory $Client -PassThru -ArgumentList $gameArgs
     } catch {
         if ($voiceOn) { Restore-Voice $Client 15 | Out-Null }
         throw
     }
     return [pscustomobject]@{ Process = $game; VoiceOn = $voiceOn }
+}
+
+# --- Started through Steam (launch options) ---------------------------------------------------
+# Steam's launch option "<this file>" %command% runs join.cmd with the game's own command line:
+# Steam's launch entry for Ring of Elysium, "<game folder>\SLauncher.exe" -steam -maintenance.
+# join.cmd then joins without menus (the server and account of join.cmd steam-setup, else the last
+# used ones) and starts Europa_Client.exe of that folder (or its XVersion when that was the last
+# game folder) with our arguments instead of the launcher; what the player wrote after %command%
+# is passed on. join.cmd steam-setup prints the line and can write it into Steam's localconfig.vdf
+# (only while Steam is closed: Steam writes the file back when it exits).
+$steamAppId = '755790'
+$steamExes = @('SLauncher.exe', 'Europa_Client.exe')
+$steamLauncherArgs = @('-steam', '-maintenance')
+$steamId64Base = [int64]76561197960265728
+$launchPath = @('UserLocalConfigStore', 'Software', 'Valve', 'Steam', 'apps')
+# The words of a command line: blanks split, double quotes group (and are dropped).
+function Split-CommandLine([string]$Text) {
+    $words = New-Object Collections.ArrayList
+    $word = New-Object Text.StringBuilder
+    $quoted = $false
+    $has = $false
+    foreach ($c in "$Text".ToCharArray()) {
+        if ($c -eq [char]'"') { $quoted = -not $quoted; $has = $true; continue }
+        if (-not $quoted -and [char]::IsWhiteSpace($c)) {
+            if ($has) { [void]$words.Add($word.ToString()); [void]$word.Clear(); $has = $false }
+            continue
+        }
+        [void]$word.Append($c)
+        $has = $true
+    }
+    if ($has) { [void]$words.Add($word.ToString()) }
+    return ,([string[]]$words.ToArray([string]))
+}
+# The game in Steam's command line: Folder (of its exe), Before (our options in front of it, as
+# text) and Extra (what follows Steam's own arguments); $null when there is none.
+function Find-SteamGame([string]$Text) {
+    $words = Split-CommandLine $Text
+    for ($i = 0; $i -lt $words.Count; $i++) {
+        if ($steamExes -notcontains (($words[$i] -split '[\\/]')[-1])) { continue }
+        $before = @(); if ($i -gt 0) { $before = @($words[0..($i - 1)]) }
+        $after = @(); if ($i + 1 -lt $words.Count) { $after = @($words[($i + 1)..($words.Count - 1)]) }
+        $quotedBefore = @($before | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
+        return [pscustomobject]@{ Folder = (Split-Path -Parent $words[$i]); Before = ($quotedBefore -join ' ')
+            Extra = [string[]]@($after | Where-Object { $steamLauncherArgs -notcontains $_ }) }
+    }
+    return $null
+}
+# The game folder to start: the saved one when it is Steam's folder or its XVersion (DX12), else Steam's.
+function Get-SteamClient([string]$Folder, [string]$Saved) {
+    $base = [IO.Path]::GetFullPath($Folder).TrimEnd('\')
+    if ($Saved) {
+        $chosen = ''
+        try { $chosen = [IO.Path]::GetFullPath($Saved).TrimEnd('\') } catch { }
+        if (($chosen -eq $base -or $chosen -eq (Join-Path $base 'XVersion')) -and (Test-Client $chosen)) { return $chosen }
+    }
+    return $base
+}
+# The account in the Steam profile: the start of its key's SHA-256 (not the key).
+function Get-AccountId([string]$Token) {
+    if (-not $Token) { return '' }
+    $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::ASCII.GetBytes($Token))
+    return ([BitConverter]::ToString($hash) -replace '-', '').Substring(0, 16).ToLowerInvariant()
+}
+# The server a start from Steam takes without asking: -Server, the profile, else the last used one;
+# '' when none is known (then the menu asks).
+function Get-SteamServer($Settings, [string]$Given) {
+    if ($Given) { return $Given }
+    if ("$($Settings.steam.server)".Trim()) { return "$($Settings.steam.server)".Trim() }
+    $saved = @(Read-Servers $Settings)
+    if ($saved.Count) { return $saved[0].address }
+    return ''
+}
+# The account a start from Steam takes: the profile's on its server, else the most recently used one
+# ($null: a new account). Found false: the profile's account is gone (then the menu asks).
+function Get-SteamAccount($Settings, [string]$Server, $Accounts) {
+    $wanted = "$($Settings.steam.account)"
+    if ($wanted -and (Get-ServerFolderName "$($Settings.steam.server)") -eq (Get-ServerFolderName $Server)) {
+        foreach ($a in $Accounts) { if ($a.token -and (Get-AccountId $a.token) -eq $wanted) { return [pscustomobject]@{ Found = $true; Entry = $a } } }
+        return [pscustomobject]@{ Found = $false; Entry = $null }
+    }
+    $entry = $null
+    if ($Accounts.Count) { $entry = $Accounts[0] }
+    return [pscustomobject]@{ Found = $true; Entry = $entry }
+}
+
+# A minimal text VDF (KeyValues) reader that keeps where each key and block is, so an edit changes
+# only that key's text and leaves the rest of the file as it is. A block: Key, Start, Open, Close,
+# End, Children; a pair: Key, Start, Value, ValueStart, End (Children $null). Throws when damaged.
+function Read-Vdf([string]$Text) {
+    $root = [pscustomobject]@{ Key = ''; Start = 0; Open = -1; Close = $Text.Length; End = $Text.Length; Children = (New-Object Collections.ArrayList); Value = $null }
+    $stack = New-Object Collections.ArrayList
+    [void]$stack.Add($root)
+    $key = $null
+    $keyStart = 0
+    $last = 0
+    if ($Text.Length -and $Text[0] -eq [char]0xFEFF) { $last = 1 }  # a byte order mark
+    $tokens = New-Object Text.RegularExpressions.Regex('"((?:[^"\\]|\\.)*)"|//[^\n]*|\[[^\]\n]*\]|[{}]|[^\s{}"]+')
+    foreach ($m in $tokens.Matches($Text, $last)) {
+        if ($Text.Substring($last, $m.Index - $last).Trim()) { throw "unexpected text at $last" }
+        $last = $m.Index + $m.Length
+        $word = $m.Value
+        if ($word.StartsWith('//', [StringComparison]::Ordinal) -or $word[0] -eq [char]'[') { continue }  # a comment or a condition such as [$WIN32]
+        $top = $stack[$stack.Count - 1]
+        if ($word -eq '{') {
+            if ($null -eq $key) { throw "a block without a name at $($m.Index)" }
+            $node = [pscustomobject]@{ Key = $key; Start = $keyStart; Open = $m.Index; Close = -1; End = -1; Children = (New-Object Collections.ArrayList); Value = $null }
+            [void]$top.Children.Add($node)
+            [void]$stack.Add($node)
+            $key = $null
+        } elseif ($word -eq '}') {
+            if ($null -ne $key -or $stack.Count -eq 1) { throw "unexpected } at $($m.Index)" }
+            $top.Close = $m.Index
+            $top.End = $last
+            $stack.RemoveAt($stack.Count - 1)
+        } else {
+            if ($m.Groups[1].Success) {
+                $word = $m.Groups[1].Value
+                if ($word.Contains('\')) {
+                    $word = [regex]::Replace($word, '\\(.)', { param($e) switch -CaseSensitive ($e.Groups[1].Value) { 'n' { "`n" } 't' { "`t" } '\' { '\' } '"' { '"' } default { $e.Value } } })
+                }
+            }
+            if ($null -eq $key) { $key = $word; $keyStart = $m.Index }
+            else {
+                [void]$top.Children.Add([pscustomobject]@{ Key = $key; Start = $keyStart; Value = $word; ValueStart = $m.Index; End = $last; Children = $null })
+                $key = $null
+            }
+        }
+    }
+    if ($Text.Substring($last).Trim() -or $null -ne $key -or $stack.Count -ne 1) { throw 'the file ends inside a block' }
+    return $root
+}
+function Get-VdfBlock($Node, [string]$Key) {
+    foreach ($c in $Node.Children) { if ($null -ne $c.Children -and $c.Key -eq $Key) { return $c } }  # case ignored
+    return $null
+}
+function Get-VdfPair($Node, [string]$Key) {
+    foreach ($c in $Node.Children) { if ($null -eq $c.Children -and $c.Key -eq $Key) { return $c } }
+    return $null
+}
+function ConvertTo-VdfText([string]$Value) { return $Value.Replace('\', '\\').Replace('"', '\"') }
+# The game's block in a localconfig.vdf text, $null when it has none.
+function Get-VdfApp([string]$Text, [string]$App = $steamAppId) {
+    $node = Read-Vdf $Text
+    foreach ($key in @($launchPath + $App)) { if ($node) { $node = Get-VdfBlock $node $key } }
+    return $node
+}
+# The game's launch options in a localconfig.vdf text; $null when it has none.
+function Get-LaunchOptions([string]$Text, [string]$App = $steamAppId) {
+    $node = Get-VdfApp $Text $App
+    if (-not $node) { return $null }
+    $pair = Get-VdfPair $node 'LaunchOptions'
+    if ($pair) { return $pair.Value }
+    return $null
+}
+# Text with UserLocalConfigStore > Software > Valve > Steam > apps > App > LaunchOptions set to
+# Value ($null: removed); everything else stays. Missing blocks below UserLocalConfigStore are added.
+function Set-LaunchOptions([string]$Text, $Value, [string]$App = $steamAppId) {
+    $node = Read-Vdf $Text
+    $keys = @($launchPath + $App)
+    $missing = @()
+    for ($i = 0; $i -lt $keys.Count; $i++) {
+        $child = Get-VdfBlock $node $keys[$i]
+        if (-not $child) { $missing = @($keys[$i..($keys.Count - 1)]); break }
+        $node = $child
+    }
+    if (-not $missing.Count) {
+        $pair = Get-VdfPair $node 'LaunchOptions'
+        if ($pair -and $null -eq $Value) {
+            $begin = 0
+            if ($pair.Start -gt 0) { $begin = $Text.LastIndexOf([char]10, $pair.Start - 1) + 1 }
+            $finish = $Text.IndexOf([char]10, $pair.End)
+            $finish = if ($finish -lt 0) { $Text.Length } else { $finish + 1 }
+            if (-not $Text.Substring($begin, $pair.Start - $begin).Trim() -and -not $Text.Substring($pair.End, $finish - $pair.End).Trim()) {
+                return $Text.Substring(0, $begin) + $Text.Substring($finish)  # its own line
+            }
+            return $Text.Substring(0, $pair.Start) + $Text.Substring($pair.End)
+        }
+        if ($pair) { return $Text.Substring(0, $pair.ValueStart) + '"' + (ConvertTo-VdfText $Value) + '"' + $Text.Substring($pair.End) }
+    }
+    if ($null -eq $Value) { return $Text }
+    if ($missing.Count -and $missing[0] -eq $keys[0]) { throw 'no UserLocalConfigStore block' }
+    $newline = if ($Text.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $close = $node.Close
+    $begin = 0
+    if ($close -gt 0) { $begin = $Text.LastIndexOf([char]10, $close - 1) + 1 }
+    $indent = [regex]::Match($Text.Substring($begin), '^[ \t]*').Value
+    if ($Text.Substring($begin, $close - $begin).Trim()) { $at = $close; $before = $newline; $after = $indent }  # "}" after other text
+    else { $at = $begin; $before = ''; $after = '' }
+    $lines = New-Object Collections.ArrayList
+    $depth = $indent + "`t"
+    foreach ($key in $missing) { [void]$lines.Add("$depth`"$(ConvertTo-VdfText $key)`""); [void]$lines.Add("$depth{"); $depth += "`t" }
+    [void]$lines.Add("$depth`"LaunchOptions`"`t`t`"$(ConvertTo-VdfText $Value)`"")
+    foreach ($key in $missing) { $depth = $depth.Substring(0, $depth.Length - 1); [void]$lines.Add("$depth}") }
+    return $Text.Substring(0, $at) + $before + ($lines -join $newline) + $newline + $after + $Text.Substring($at)
+}
+# Steam's folder: the registry's, else the usual place.
+function Get-SteamFolder {
+    foreach ($place in @(@('HKCU:\Software\Valve\Steam', 'SteamPath'), @('HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'InstallPath'), @('HKLM:\SOFTWARE\Valve\Steam', 'InstallPath'))) {
+        try {
+            $path = (Get-ItemProperty -LiteralPath $place[0] -ErrorAction Stop).($place[1])
+            if ($path -and (Test-Path -LiteralPath $path -PathType Container)) { return [IO.Path]::GetFullPath($path.Replace('/', '\')) }
+        } catch { }
+    }
+    return Join-Path ${env:ProgramFiles(x86)} 'Steam'
+}
+function Test-SteamRunning { return [bool](Get-Process -Name 'steam' -ErrorAction SilentlyContinue) }
+# The Steam users of Steam's folder with a localconfig.vdf: Id, Path, Owns (the file has the game's
+# block: the user played it), Name and Recent (from loginusers.vdf), the most recently logged in first.
+function Get-SteamUsers([string]$Steam, [string]$App = $steamAppId) {
+    $logins = @{}
+    try {
+        $users = Get-VdfBlock (Read-Vdf ([IO.File]::ReadAllText((Join-Path $Steam 'config\loginusers.vdf')))) 'users'
+        foreach ($entry in @($users.Children)) {
+            if ($null -eq $entry.Children -or $entry.Key -notmatch '^\d+$') { continue }
+            $values = @{}
+            foreach ($c in $entry.Children) { if ($null -eq $c.Children) { $values[$c.Key.ToLowerInvariant()] = $c.Value } }
+            $recent = [int64]0
+            try { $recent = [int64]$values['timestamp'] } catch { }
+            if ($values['mostrecent'] -eq '1') { $recent = [Math]::Max($recent, 1) * 2 }  # Steam's own mark of the last login
+            $logins["$([int64]$entry.Key - $steamId64Base)"] = @("$($values['personaname'])", $recent)
+        }
+    } catch { }
+    $found = @()
+    foreach ($folder in @(Get-ChildItem -LiteralPath (Join-Path $Steam 'userdata') -Directory -ErrorAction SilentlyContinue)) {
+        $path = Join-Path $folder.FullName 'config\localconfig.vdf'
+        if ($folder.Name -notmatch '^\d+$' -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        $owns = $false
+        try { $owns = $null -ne (Get-VdfApp ([IO.File]::ReadAllText($path)) $App) } catch { }
+        $login = $logins[$folder.Name]
+        if (-not $login) { $login = @('', [int64]0) }
+        $found += [pscustomobject]@{ Id = $folder.Name; Path = $path; Owns = $owns; Name = $login[0]; Recent = $login[1] }
+    }
+    return @($found | Sort-Object -Property Recent -Descending)
+}
+# The Steam user whose launch options to set: the only one that played the game, else asked.
+function Select-SteamUser($Users) {
+    $owners = @($Users | Where-Object { $_.Owns })
+    if (-not $owners.Count) { $owners = @($Users) }
+    if ($owners.Count -eq 1) { return $owners[0] }
+    Write-Host 'Steam user (the one you play Ring of Elysium with):'
+    return $owners[(Select-Menu @($owners | ForEach-Object { if ($_.Name) { "$($_.Name) ($($_.Id))" } else { $_.Id } }))]
+}
+# Sets the launch options in a localconfig.vdf ($null: removes them) after a backup next to it.
+# Returns the backup's path, '' when nothing changed.
+function Write-LaunchOptions([string]$Path, $Value, [string]$App = $steamAppId) {
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    try { $text = $utf8.GetString($bytes) } catch { throw "$Path is not UTF-8 text; set the launch options in Steam yourself." }
+    try { $changed = Set-LaunchOptions $text $Value $App } catch { throw "Could not read $Path ($($_.Exception.Message)); set the launch options in Steam yourself." }
+    if ($changed -ceq $text) { return '' }
+    $backup = "$Path.$((Get-Date).ToString('yyyyMMdd-HHmmss')).roe-join.bak"
+    [IO.File]::WriteAllBytes($backup, $bytes)
+    $temp = "$Path.roe-join.tmp"
+    [IO.File]::WriteAllBytes($temp, $utf8.GetBytes($changed))
+    Move-Item -LiteralPath $temp -Destination $Path -Force
+    return $backup
+}
+function Get-SteamLaunchLine([string]$Self = $env:ROE_JOIN_SELF) { return "`"$Self`" %command%" }
+function Test-OurLaunchOptions([string]$Launch) { return [bool]($Launch -and $Launch -match 'join\.(cmd|py)\b') }
+# join.cmd [-Server <address>] [-Name <name>] steam-setup [off]: the Steam profile and the launch
+# option line, written into Steam when the player wants (Steam closed). Steam: Get-SteamFolder's.
+function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name, [string]$Steam = (Get-SteamFolder)) {
+    $line = Get-SteamLaunchLine
+    if ($Off -or -not ($Server -or $Name)) {
+        $Settings.PSObject.Properties.Remove('steam')
+        if (-not $Off) { Write-Host 'Started from Steam, join.cmd joins the server and account you used last (-Server and -Name fix them).' }
+    } else {
+        $Server = Get-SteamServer $Settings $Server
+        if (-not $Server) { throw 'A server is needed: join.cmd -Server <address> steam-setup' }
+        $steamProfile = [pscustomobject]@{ server = $Server; account = '' }
+        if ($Name) {
+            $entry = @(Read-Accounts (Get-AccountFolder $Server) | Where-Object { $_.token -and $_.name -eq $Name })[0]
+            if (-not $entry) { throw "No saved account named $Name for $Server. Join once with it first." }
+            $steamProfile.account = Get-AccountId $entry.token
+        }
+        $Settings | Add-Member -NotePropertyName steam -NotePropertyValue $steamProfile -Force
+        Write-Host ("Started from Steam, join.cmd joins $Server" + $(if ($Name) { " as $Name." } else { ' with its last used account.' }))
+    }
+    $Settings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+    $yourself = if ($Off) { 'remove the line in Steam yourself.' } else { 'paste the line into Steam yourself.' }
+    if (-not $Off) {
+        Write-Host 'Steam launch option (Ring of Elysium > Properties > General > Launch options):'
+        Write-Host "  $line"
+    }
+    $users = @(Get-SteamUsers $Steam)
+    if (-not $users.Count) { Write-Host "No Steam user folder in ${Steam}: $yourself"; return }
+    $what = if ($Off) { 'Remove it from Steam now' } else { 'Set it in Steam now' }
+    if ((Ask "$what? (y/n)" 'y') -notmatch '^[yY]') { return }
+    if (Test-SteamRunning) { throw "Steam is running: it writes its settings back when it exits, so the change would be lost. Exit Steam (Steam > Exit), then run this again. Or $yourself" }
+    $user = Select-SteamUser $users
+    $old = Get-LaunchOptions ([IO.File]::ReadAllText($user.Path))
+    if ($Off -and $null -ne $old -and -not (Test-OurLaunchOptions $old)) { Write-Host "The launch options in Steam are not ours, so they stay: $old"; return }
+    if (-not $Off -and $old -and $old -cne $line) { Write-Host "Replacing the launch options: $old" }
+    $backup = Write-LaunchOptions $user.Path $(if ($Off) { $null } else { $line })
+    if (-not $backup) { Write-Host $(if ($Off) { 'Nothing to change in Steam.' } else { 'Steam has this line already.' }); return }
+    Write-Host ("$(if ($Off) { 'Removed from' } else { 'Set in' }) Steam ($($user.Path); the old file is $(Split-Path -Leaf $backup)). Start Steam and press Play.")
 }
 
 # === The window ===============================================================================
@@ -2497,8 +2802,14 @@ try {
     # --skip-file-check: no check of the game files (for players who changed them on purpose).
     $skipFileCheck = $argText -match '(^|\s)--skip-file-check(?=\s|$)'
     $argText = ($argText -replace '(^|\s)--skip-file-check(?=\s|$)', ' ').Trim()
+    # Started by Steam ("<join.cmd>" %command%): the command line names the game's exe; our options
+    # are the ones in front of it.
+    $steamGame = Find-SteamGame $argText
+    if ($steamGame) { $argText = $steamGame.Before.Trim() }
     $usage = ('Usage: join.cmd [--console] [--skip-file-check] [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" +
-        'For GM accounts: join.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)' + "`n" + 'The window: join.cmd without arguments, or join.cmd --window')
+        'For GM accounts: join.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)' + "`n" +
+        'Start through Steam: join.cmd [-Server <address>] [-Name <name>] steam-setup [off] (the launch option line, set in Steam if you want)' + "`n" +
+        'The window: join.cmd without arguments, or join.cmd --window')
     $arguments = Read-Arguments $argText
     # Ours left by a crash or a closed window: the original back first. Not for "admin", which
     # runs next to a game this script started (its join puts the DLL back when the game exits).
@@ -2509,7 +2820,12 @@ try {
     if ($argText -match '(^|\s)-Name(\s|$)' -and (-not $givenName -or $givenName.Length -gt 24 -or $givenName -match '[\x00-\x1f]')) {
         throw 'The name must be 1 to 24 characters without control characters.'
     }
-    if ($command -and $command -ne 'admin' -and ($givenName -or $givenServer)) { throw $usage }
+    if ($command -and $command -ne 'admin' -and $command -notmatch '^steam-setup\b' -and ($givenName -or $givenServer)) { throw $usage }
+    if ($steamGame -and $command) { throw $usage }
+    if ($command -match '^steam-setup(\s+(on|off))?$') {
+        Invoke-SteamSetup $settings ("$($Matches[2])" -eq 'off') $givenServer $givenName
+        exit 0
+    }
     if ($command -match '^voice(\s+(on|off))?$') {
         $set = $Matches[2]
         if ($set) {
@@ -2586,21 +2902,26 @@ try {
         Write-Host 'Firewall rules off: join.cmd no longer creates them (the game can reach the internet).'
         exit 0
     }
-    Write-Host 'Ring of Elysium 2022: join a server'
+    Write-Host ('Ring of Elysium 2022: join a server' + $(if ($steamGame) { ' (started by Steam)' } else { '' }))
     Write-Host ''
 
     # 1. The game.
     # Always asked (Enter keeps the last one): a second game folder, for example XVersion,
-    # lets a second player join from the same PC.
-    $guess = $settings.client
-    if (-not (Test-Client $guess)) { $guess = 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' }
-    if (-not (Test-Client $guess)) { $guess = '' }
-    $client = Get-GameFolder (Ask 'Game folder (the one with Europa_Client.exe)' $guess)
+    # lets a second player join from the same PC. Started by Steam: Steam's folder.
+    if ($steamGame) {
+        $client = Get-GameFolder (Get-SteamClient $steamGame.Folder "$($settings.client)")
+    } else {
+        $guess = $settings.client
+        if (-not (Test-Client $guess)) { $guess = 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' }
+        if (-not (Test-Client $guess)) { $guess = '' }
+        $client = Get-GameFolder (Ask 'Game folder (the one with Europa_Client.exe)' $guess)
+    }
     Confirm-GameFiles $client $skipFileCheck
 
     # 2. Server and name.
     $serverList = @(Get-OfferedServers $settings)
-    $server = "$(Select-Server $serverList $givenServer)".Trim()
+    $given = if ($steamGame) { Get-SteamServer $settings $givenServer } else { $givenServer }
+    $server = "$(Select-Server $serverList $given)".Trim()
     if (-not $server) { throw 'A server address is needed.' }
     $hostName = Get-ServerHost $server
     $firewall = $settings.firewall
@@ -2647,7 +2968,14 @@ try {
     # 4. Log in.
     $accountList = Read-Accounts $folder
     if ($accountList.Count -and -not $givenName -and (Update-AccountNames $serverIp $folder $accountList)) { Save-Accounts $folder $accountList | Out-Null }
-    $login = Connect-Account $serverIp $folder $accountList (Select-Account $accountList $givenName) $givenName
+    if ($steamGame -and -not $givenName) {
+        $steamPick = Get-SteamAccount $settings $server $accountList
+        if (-not $steamPick.Found) { Write-Host 'The account join.cmd steam-setup saved for Steam starts is no longer there. Choose one:' }
+        $entry = if ($steamPick.Found) { $steamPick.Entry } else { Select-Account $accountList '' }
+    } else {
+        $entry = Select-Account $accountList $givenName
+    }
+    $login = Connect-Account $serverIp $folder $accountList $entry $givenName
     Save-Settings
     if ($login.Accounts) {
         $info = $null
@@ -2657,8 +2985,10 @@ try {
         if ($info -match '^OK ') { Write-Host (Format-ServerNow $info $stats) }
     }
 
-    # 5. The game.
-    $game = Start-Game $client $login.Uid $serverIp $voicePick
+    # 5. The game (started by Steam: with what the player wrote after %command%).
+    $extra = @()
+    if ($steamGame) { $extra = @($steamGame.Extra) }
+    $game = Start-Game $client $login.Uid $serverIp $voicePick $extra
     try {
         # While the game runs: the server's numbers every 30 s, in the window title and on one line
         # here that is written over each time.

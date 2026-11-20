@@ -68,6 +68,37 @@ at the address the server names (`roe_server set admin-url URL`), else at
 one without the page (`NONE`) or an older one (`INVALID`) gets a clear message. The server checks
 the GM rights again at the login and at every change, so the hidden button is only convenience.
 
+### Start through Steam
+
+Steam's launch entry for Ring of Elysium (app 755790) is `SLauncher.exe -steam -maintenance` in
+the game folder, and `%command%` in the launch options stands for that line. With the launch
+option `"<path>\join.cmd" %command%` Steam starts join.cmd with
+`"<game folder>\SLauncher.exe" -steam -maintenance` (Windows runs a .cmd through `cmd.exe /c`, so
+it is the console version). join.cmd finds the exe among the arguments; options in front of it
+(`-Server`, `-Name`, `--skip-file-check`) are join.cmd's. It joins without menus: the server and
+account of the profile `steam-setup` saved, else the last used ones (the first start without any
+asks in the console). It starts `Europa_Client.exe` of Steam's folder (its `XVersion` when that is
+the saved game folder) with our arguments; Steam's two launcher arguments are dropped, anything
+the player wrote after `%command%` is passed on. It waits for the game and puts the voice DLL back
+as usual; Steam counts the time until join.cmd ends.
+
+`join.cmd [-Server <address>] [-Name <name>] steam-setup` prints the line, saves the profile
+(`steam` in roe-join.json: the server and the start of the account key's SHA-256, not the key;
+without `-Server`/`-Name` none, so the last used ones count) and offers to set it in Steam:
+`userdata\<id>\config\localconfig.vdf`, key `UserLocalConfigStore > Software > Valve > Steam >
+apps > 755790 > LaunchOptions`. Steam writes that file back when it exits, so it refuses while
+Steam runs. It takes the user folder whose file has the game (asks when several have), saves the
+file as `localconfig.vdf.<date>.roe-join.bak` next to it and changes only that key (a small VDF
+reader that keeps the rest byte for byte). `steam-setup off` removes our line (someone else's
+launch options stay) and the profile.
+
+join.py does the same on Linux: `python3 join.py --steam-setup [off]` (with `--server`, `--name`),
+launch option `python3 "/path/join.py" --steam %command%`. There `%command%` is Steam's whole
+chain (reaper, the Steam Linux Runtime, Proton, then SLauncher.exe); join.py runs it with
+`Europa_Client.exe` and our arguments in place of SLauncher.exe and its arguments, so Steam's
+Proton and prefix are used. A failure without a terminal shows a message with zenity, kdialog or
+notify-send when one exists.
+
 ## The voice DLL
 
 The game's voice chat (party and squad, and the match's proximity channel) ran over Tencent's

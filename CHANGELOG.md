@@ -7,6 +7,14 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- Start through Steam: Steam's Play button (with its overlay and playtime) can start the game
+  through join.cmd. `join.cmd steam-setup` shows the launch option line (`"<path>\join.cmd"
+  %command%`) and, while Steam is closed, puts it into Steam for you (a backup of Steam's
+  localconfig.vdf is kept next to it; only that one setting changes). Started by Steam, join.cmd
+  logs in with the server and account you used last (or the ones given once with
+  `join.cmd -Server <address> -Name <name> steam-setup`) and starts the game, DirectX 12 too when
+  that was your last choice. `join.cmd steam-setup off` removes it. On Linux the same with
+  `python3 join.py --steam-setup`: Steam then starts join.py, which uses Steam's own Proton.
 - Admin accounts: a server can now mark an account as admin (a GM that may also change the
   server's technical settings). join.cmd's window shows **Open the admin page** for such an
   account too, and `join.py --admin` takes it like a GM's.

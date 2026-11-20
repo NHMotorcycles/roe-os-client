@@ -47,6 +47,12 @@
 # name into one file (default roe-join-accounts.json here); --import FILE merges one into this
 # computer. join.cmd reads and writes the same file (join.cmd export, join.cmd import).
 #
+# Steam: with the launch option `python3 "/path/join.py" --steam %command%` Steam's Play button starts
+# join.py with Steam's own command (its runtime and Proton); join.py joins the server and account of
+# --steam-setup (else the last used ones) and runs that command with the game and our arguments.
+# --steam-setup [off] (with --server, --name) prints the line and sets (or removes) it in Steam while
+# Steam is closed.
+#
 # GM accounts: --admin (with --server and --name as for a join) opens the server's admin page in the
 # browser with a one-time login link, as join.cmd admin.
 #
@@ -323,7 +329,29 @@ def environment(plan):
     return env
 
 
+def wait_game(game, watch=None):
+    # While it runs, `watch` is called every 30 s (the server's numbers).
+    while True:
+        try:
+            code = game.wait(timeout=30 if watch else None)
+            break
+        except subprocess.TimeoutExpired:
+            watch()
+    if watch:
+        print()
+    return code
+
+
 def start_game(client, arguments, options, watch=None):
+    steam = getattr(options, 'steam_command', None)
+    if steam is not None:
+        # Started by Steam: its command (runtime, Proton) with our game and arguments; Steam set the
+        # environment already.
+        command = steam_game_command(steam, options.steam_index, client, arguments)
+        if options.dry_run:
+            print("Would run Steam's command (in the game folder): " + ' '.join(shlex.quote(c) for c in command))
+            return 0
+        return wait_game(subprocess.Popen(command, cwd=client), watch)
     plan = plan_start(client, arguments, options)
     show_plan(plan)
     env = environment(plan)
@@ -341,17 +369,7 @@ def start_game(client, arguments, options, watch=None):
         if not prefix_ready(plan['prefix']):
             raise Failure(f'Proton could not set up the prefix {plan["prefix"]}. Start Ring of Elysium once from Steam '
                           '(it sets up the prefix; quit at the login screen), then run join.py again.')
-    game = subprocess.Popen(plan['command'], cwd=client, env=env)
-    # While it runs, `watch` is called every 30 s (the server's numbers).
-    while True:
-        try:
-            code = game.wait(timeout=30 if watch else None)
-            break
-        except subprocess.TimeoutExpired:
-            watch()
-    if watch:
-        print()
-    return code
+    return wait_game(subprocess.Popen(plan['command'], cwd=client, env=env), watch)
 
 
 # --- Voice chat --------------------------------------------------------------------------------
@@ -1180,6 +1198,10 @@ def parse_arguments(argv):
                         help="GM accounts: open the server's admin page in the browser (with --server and --name as for a join)")
     parser.add_argument('--skip-file-check', action='store_true',
                         help='no check of the game files (the ones other launchers change) before the join')
+    parser.add_argument('--steam-setup', nargs='?', const='on', choices=('on', 'off'),
+                        help='start through Steam: print the launch option line and offer to set it in Steam (Steam closed); '
+                             'with --server/--name Steam starts join that server and account, else the last used; off removes it. '
+                             'Steam then runs: join.py [options] --steam %%command%%')
     parser.add_argument('--dry-run', action='store_true', default=bool(os.environ.get('ROE_JOIN_DRY_RUN')),
                         help='print what would be done: no server contact, no files written; also ROE_JOIN_DRY_RUN=1')
     return parser.parse_args(argv)
@@ -1518,6 +1540,349 @@ def admin_command(options, settings, opener=None):
     return 0
 
 
+# --- Started through Steam (launch options) ----------------------------------------------------
+# Steam's launch option `python3 "/path/join.py" --steam %command%` runs join.py with the game's own
+# command after --steam: on Linux Steam's runtime and Proton, ending in the game folder's
+# SLauncher.exe (Steam's launch entry for Ring of Elysium: SLauncher.exe -steam -maintenance). join.py
+# logs in as usual and runs that command with Europa_Client.exe and our arguments in place of the
+# launcher and its arguments, so Steam's overlay, playtime and Proton stay. --steam-setup prints the
+# line and can write it into Steam's localconfig.vdf (only while Steam is closed: Steam writes the
+# file back when it exits).
+STEAM_EXES = ('slauncher.exe', 'europa_client.exe')
+STEAM_LAUNCHER_ARGS = ('-steam', '-maintenance')   # Steam's arguments for SLauncher.exe
+STEAM_ID64_BASE = 76561197960265728
+LAUNCH_PATH = ('UserLocalConfigStore', 'Software', 'Valve', 'Steam', 'apps')
+VDF_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|//[^\n]*|\[[^\]\n]*\]|[{}]|[^\s{}"]+')
+VDF_UNESCAPE = {'n': '\n', 't': '\t', '\\': '\\', '"': '"'}
+
+
+def split_steam_command(argv):
+    """(our arguments, Steam's command) of `join.py [options] --steam %command%`; None: not from Steam."""
+    if '--steam' not in argv:
+        return list(argv), None
+    i = argv.index('--steam')
+    return list(argv[:i]), list(argv[i + 1:])
+
+
+def steam_game(command):
+    """(index, folder) of the game's exe (SLauncher.exe or Europa_Client.exe) in Steam's command,
+    else (None, None)."""
+    for i, word in enumerate(command):
+        if re.split(r'[\\/]', word)[-1].lower() in STEAM_EXES:
+            return i, str(Path(word).parent)
+    return None, None
+
+
+def steam_client(folder, saved):
+    """The game folder to start: the saved one when it is Steam's folder or its XVersion (DX12),
+    else Steam's folder."""
+    base = Path(folder).resolve()
+    if saved:
+        try:
+            chosen = Path(saved).resolve()
+        except (OSError, RuntimeError):
+            chosen = None
+        if chosen in (base, base / 'XVersion') and is_client(chosen):
+            return str(chosen)
+    return str(base)
+
+
+def steam_game_command(command, index, client, arguments):
+    """Steam's command with Europa_Client.exe of client and our arguments in place of the game's exe
+    and Steam's own arguments for it; what the player wrote after %command% stays."""
+    extra = [word for word in command[index + 1:] if word.lower() not in STEAM_LAUNCHER_ARGS]
+    return command[:index] + [str(Path(client) / 'Europa_Client.exe')] + list(arguments) + extra
+
+
+def account_id(token):
+    """The account in the Steam profile: the start of its key's SHA-256 (not the key)."""
+    return hashlib.sha256(token.encode('ascii')).hexdigest()[:16] if token else ''
+
+
+def steam_profile(settings):
+    return settings.get('steam') if isinstance(settings.get('steam'), dict) else {}
+
+
+def steam_server(settings, given=None):
+    """The server a start from Steam takes without asking: --server, the profile, else the last used
+    one; '' when none is known (then the menu asks)."""
+    if given:
+        return given
+    profile = steam_profile(settings)
+    if isinstance(profile.get('server'), str) and profile['server'].strip():
+        return profile['server'].strip()
+    saved = saved_servers(settings)
+    return saved[0]['address'] if saved else ''
+
+
+def steam_account(settings, server, accounts):
+    """(found, entry) for a start from Steam: the profile's account on its server, else the most
+    recently used one (None: a new account). found False: the profile's account is gone (ask)."""
+    profile = steam_profile(settings)
+    wanted = profile.get('account') if isinstance(profile.get('account'), str) else ''
+    if wanted and server_folder_name(str(profile.get('server') or '')) == server_folder_name(server):
+        entry = next((a for a in accounts if a.get('token') and account_id(a['token']) == wanted), None)
+        return entry is not None, entry
+    return True, accounts[0] if accounts else None
+
+
+# A minimal text VDF (KeyValues) reader that keeps where each key and block is, so an edit changes
+# only that key's text and leaves the rest of the file byte for byte.
+def vdf_parse(text):
+    """The tree of text: a block is {key, start, open, close, end, children}, a pair {key, start,
+    value, vstart, end}. Raises ValueError when the file is damaged."""
+    root = {'key': '', 'start': 0, 'open': -1, 'close': len(text), 'end': len(text), 'children': []}
+    stack, key = [root], None
+    last = 1 if text.startswith(chr(0xFEFF)) else 0   # a byte order mark
+    for m in VDF_TOKEN.finditer(text, last):
+        if text[last:m.start()].strip():
+            raise ValueError(f'unexpected text at {last}')
+        last = m.end()
+        word = m.group(0)
+        if word.startswith('//') or word.startswith('['):
+            continue   # a comment or a condition such as [$WIN32]
+        if word == '{':
+            if key is None:
+                raise ValueError(f'a block without a name at {m.start()}')
+            node = {'key': key[0], 'start': key[1], 'open': m.start(), 'children': []}
+            stack[-1]['children'].append(node)
+            stack.append(node)
+            key = None
+        elif word == '}':
+            if key is not None or len(stack) == 1:
+                raise ValueError(f'unexpected }} at {m.start()}')
+            node = stack.pop()
+            node['close'], node['end'] = m.start(), m.end()
+        else:
+            if m.group(1) is not None:
+                word = re.sub(r'\\(.)', lambda e: VDF_UNESCAPE.get(e.group(1), e.group(0)), m.group(1))
+            if key is None:
+                key = (word, m.start())
+            else:
+                stack[-1]['children'].append({'key': key[0], 'start': key[1], 'value': word, 'vstart': m.start(), 'end': m.end()})
+                key = None
+    if text[last:].strip() or key is not None or len(stack) != 1:
+        raise ValueError('the file ends inside a block')
+    return root
+
+
+def vdf_block(node, key):
+    return next((c for c in node['children'] if 'children' in c and c['key'].lower() == key.lower()), None)
+
+
+def vdf_pair(node, key):
+    return next((c for c in node['children'] if 'value' in c and c['key'].lower() == key.lower()), None)
+
+
+def vdf_escape(value):
+    return value.replace('\\', '\\\\').replace('"', '\\"')
+
+
+def vdf_app(text, app=STEAM_APP_ID):
+    """The game's block in a localconfig.vdf text, None when it has none."""
+    node = vdf_parse(text)
+    for key in LAUNCH_PATH + (app,):
+        node = node and vdf_block(node, key)
+    return node
+
+
+def launch_options(text, app=STEAM_APP_ID):
+    """The game's launch options in a localconfig.vdf text; None when it has none."""
+    node = vdf_app(text, app)
+    pair = node and vdf_pair(node, 'LaunchOptions')
+    return pair['value'] if pair else None
+
+
+def set_launch_options(text, value, app=STEAM_APP_ID):
+    """text with UserLocalConfigStore > Software > Valve > Steam > apps > app > LaunchOptions set to
+    value (None: removed); everything else stays as it is. Missing blocks below UserLocalConfigStore
+    are added."""
+    node = vdf_parse(text)
+    keys = LAUNCH_PATH + (app,)
+    missing = ()
+    for i, key in enumerate(keys):
+        child = vdf_block(node, key)
+        if child is None:
+            missing = keys[i:]
+            break
+        node = child
+    if not missing:
+        pair = vdf_pair(node, 'LaunchOptions')
+        if pair and value is None:
+            begin = text.rfind('\n', 0, pair['start']) + 1
+            finish = text.find('\n', pair['end'])
+            finish = len(text) if finish < 0 else finish + 1
+            if not text[begin:pair['start']].strip() and not text[pair['end']:finish].strip():
+                return text[:begin] + text[finish:]   # its own line
+            return text[:pair['start']] + text[pair['end']:]
+        if pair:
+            return text[:pair['vstart']] + '"' + vdf_escape(value) + '"' + text[pair['end']:]
+    if value is None:
+        return text
+    if missing and missing[0] == keys[0]:
+        raise ValueError('no UserLocalConfigStore block')
+    newline = '\r\n' if '\r\n' in text else '\n'
+    close = node['close']
+    begin = text.rfind('\n', 0, close) + 1
+    indent = re.match(r'[ \t]*', text[begin:]).group(0)
+    if text[begin:close].strip():   # "}" after other text on its line
+        at, before, after = close, newline, indent
+    else:
+        at, before, after = begin, '', ''
+    lines, depth = [], indent + '\t'
+    for key in missing:
+        lines += [f'{depth}"{vdf_escape(key)}"', depth + '{']
+        depth += '\t'
+    lines.append(f'{depth}"LaunchOptions"\t\t"{vdf_escape(value)}"')
+    for _ in missing:
+        depth = depth[:-1]
+        lines.append(depth + '}')
+    return text[:at] + before + newline.join(lines) + newline + after + text[at:]
+
+
+def steam_running(proc=Path('/proc')):
+    """Whether a Steam client runs (a process named steam)."""
+    for comm in proc.glob('[0-9]*/comm'):
+        try:
+            if comm.read_text(encoding='utf-8', errors='replace').strip() == 'steam':
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def steam_users(root, app=STEAM_APP_ID):
+    """The Steam users of a Steam folder with a localconfig.vdf: [{id, path, owns, name, recent}],
+    owns: the file has the game's block (the user played it); the most recently logged in first."""
+    logins = {}
+    try:
+        users = vdf_block(vdf_parse((Path(root) / 'config/loginusers.vdf').read_text(encoding='utf-8', errors='replace')), 'users')
+    except (OSError, ValueError):
+        users = None
+    for entry in users['children'] if users else []:
+        if 'children' in entry and entry['key'].isdigit():
+            values = {c['key'].lower(): c['value'] for c in entry['children'] if 'value' in c}
+            try:
+                recent = int(values.get('timestamp') or 0)
+            except ValueError:
+                recent = 0
+            if values.get('mostrecent') == '1':
+                recent = max(recent, 1) * 2   # Steam's own mark of the last login
+            logins[str(int(entry['key']) - STEAM_ID64_BASE)] = (values.get('personaname', ''), recent)
+    found = []
+    for folder in sorted(Path(root).glob('userdata/*')):
+        path = folder / 'config/localconfig.vdf'
+        if not folder.name.isdigit() or not path.is_file():
+            continue
+        try:
+            node = vdf_app(path.read_text(encoding='utf-8', errors='replace'), app)
+        except (OSError, ValueError):
+            node = None
+        name, recent = logins.get(folder.name, ('', 0))
+        found.append({'id': folder.name, 'path': path, 'owns': node is not None, 'name': name, 'recent': recent})
+    found.sort(key=lambda u: -u['recent'])
+    return found
+
+
+def choose_steam_user(users, choose=pick):
+    """The Steam user whose launch options to set: the only one that played the game, else asked."""
+    owners = [u for u in users if u['owns']] or users
+    if len(owners) == 1:
+        return owners[0]
+    print('Steam user (the one you play Ring of Elysium with):')
+    return owners[choose([(f"{u['name']} ({u['id']})" if u['name'] else u['id']) for u in owners])]
+
+
+def write_launch_options(path, value, app=STEAM_APP_ID, now=None):
+    """Sets the launch options in a localconfig.vdf (None: removes them) after a backup next to it.
+    Returns the backup's path, None when nothing changed."""
+    path = Path(path)
+    data = path.read_bytes()
+    try:
+        text = data.decode('utf-8')
+    except UnicodeDecodeError:
+        raise Failure(f'{path} is not UTF-8 text; set the launch options in Steam yourself.')
+    try:
+        changed = set_launch_options(text, value, app)
+    except ValueError as error:
+        raise Failure(f'Could not read {path} ({error}); set the launch options in Steam yourself.')
+    if changed == text:
+        return None
+    stamp = time.strftime('%Y%m%d-%H%M%S', time.localtime(now))
+    backup = path.with_name(f'{path.name}.{stamp}.roe-join.bak')
+    shutil.copy2(path, backup)
+    temp = path.with_name(path.name + '.roe-join.tmp')
+    temp.write_bytes(changed.encode('utf-8'))
+    os.replace(temp, path)
+    return backup
+
+
+def steam_launch_line(script=None):
+    return f'python3 "{Path(script or __file__).resolve()}" --steam %command%'
+
+
+def is_ours(launch):
+    """Whether launch options are join.cmd's or join.py's."""
+    return bool(launch) and bool(re.search(r'join\.(cmd|py)\b', launch, re.I))
+
+
+def steam_setup_command(options, settings, home=None, question=ask, choose=pick, running=steam_running, script=None):
+    """--steam-setup [on|off]: the Steam profile (--server/--name) and the launch option line, written
+    into Steam when the player wants (Steam closed)."""
+    off = options.steam_setup == 'off'
+    line = steam_launch_line(script)
+    if off or not (options.server or options.name):
+        settings.pop('steam', None)
+        if not off:
+            print('Started from Steam, join.py joins the server and account you used last (--server and --name fix them).')
+    else:
+        server = steam_server(settings, options.server)
+        if not server:
+            raise Failure('A server is needed: --server <address>.')
+        profile = {'server': server, 'account': ''}
+        if options.name:
+            entry = next((a for a in load_accounts(CONFIG / 'roe-join' / server_folder_name(server))
+                          if a['token'] and a['name'].lower() == options.name.lower()), None)
+            if not entry:
+                raise Failure(f'No saved account named {options.name} for {server}. Join once with it first.')
+            profile['account'] = account_id(entry['token'])
+        settings['steam'] = profile
+        print(f'Started from Steam, join.py joins {server}' + (f' as {options.name}.' if options.name else ' with its last used account.'))
+    if not options.dry_run:
+        CONFIG.mkdir(parents=True, exist_ok=True)
+        SETTINGS.write_text(json.dumps(settings, indent=2), encoding='utf-8')
+    yourself = 'remove the line in Steam yourself.' if off else 'paste the line into Steam yourself.'
+    if not off:
+        print('Steam launch option (Ring of Elysium > Properties > General > Launch options):')
+        print('  ' + line)
+    users = [u for root in steam_roots(home or Path.home()) for u in steam_users(root)]
+    if not users:
+        print('No Steam user folder found: ' + yourself)
+        return 0
+    what = 'Remove it from Steam now' if off else 'Set it in Steam now'
+    if options.dry_run:
+        print(f'Would ask: {what}? (y/n)')
+        return 0
+    if not question(f'{what}? (y/n)', 'y').lower().startswith('y'):
+        return 0
+    if running():
+        raise Failure('Steam is running: it writes its settings back when it exits, so the change would be lost. '
+                      'Exit Steam (Steam > Exit), then run this again. Or ' + yourself)
+    user = choose_steam_user(users, choose)
+    old = launch_options(user['path'].read_text(encoding='utf-8', errors='replace'))
+    if off and old is not None and not is_ours(old):
+        print(f'The launch options in Steam are not ours, so they stay: {old}')
+        return 0
+    if not off and old and old != line:
+        print(f'Replacing the launch options: {old}')
+    backup = write_launch_options(user['path'], None if off else line)
+    if backup is None:
+        print('Nothing to change in Steam.' if off else 'Steam has this line already.')
+    else:
+        print(('Removed from' if off else 'Set in') + f' Steam ({user["path"]}; the old file is {backup.name}). Start Steam and press Play.')
+    return 0
+
+
 # --- Game files changed by other launchers -----------------------------------------------------
 # Other launchers and lobby patchers change files of the Ring of Elysium folder (an XVersion folder
 # uses its parent's): blocks appended to the .sfc archives (menus, lobby banners and images, chat
@@ -1666,7 +2031,9 @@ def confirm_game_files(client, backups, skip=False, dry_run=False, question=ask,
 
 
 def main(argv=None):
-    options = parse_arguments(sys.argv[1:] if argv is None else argv)
+    argv, steam_command = split_steam_command(sys.argv[1:] if argv is None else argv)
+    options = parse_arguments(argv)
+    options.steam_command, options.steam_index = steam_command, None
     try:
         settings = json.loads(SETTINGS.read_text(encoding='utf-8'))
     except (OSError, ValueError):
@@ -1677,6 +2044,14 @@ def main(argv=None):
         return backup_command(options, settings)
     if options.admin:
         return admin_command(options, settings)
+    if options.steam_setup:
+        return steam_setup_command(options, settings)
+    steam_folder = None
+    if steam_command is not None:
+        options.steam_index, steam_folder = steam_game(steam_command)
+        if options.steam_index is None:
+            raise Failure("Steam's command names no SLauncher.exe or Europa_Client.exe (" + ' '.join(steam_command) +
+                          '). The launch option must end with --steam %command%.')
     print('Ring of Elysium 2022: join a server' + (' (dry run)' if options.dry_run else ''))
     print()
     if not options.dry_run:
@@ -1684,7 +2059,9 @@ def main(argv=None):
     problems = []
 
     # 1. The game.
-    if options.game:
+    if steam_folder:
+        client = steam_client(steam_folder, settings.get('client'))
+    elif options.game:
         client = options.game
     else:
         guess = settings.get('client', '')
@@ -1711,7 +2088,8 @@ def main(argv=None):
 
     # 2. Server and name. The game only connects to lobby port 8001, so a second server needs its own address.
     servers = offered_servers(settings)
-    server = choose_server(servers, options.server).strip()
+    given = steam_server(settings, options.server) if steam_folder else options.server
+    server = choose_server(servers, given).strip()
     if not server:
         raise Failure('A server address is needed.')
     host, lobby_port = server, 8001
@@ -1730,8 +2108,9 @@ def main(argv=None):
             return
         CONFIG.mkdir(parents=True, exist_ok=True)
         values = {'client': client, 'voice': voice, 'servers': servers}
-        if settings.get('voice_dll'):
-            values['voice_dll'] = settings['voice_dll']
+        for key in ('voice_dll', 'steam'):
+            if settings.get(key):
+                values[key] = settings[key]
         SETTINGS.write_text(json.dumps(values, indent=2), encoding='utf-8')
     servers = remember_server(servers, server)
     save()
@@ -1765,8 +2144,16 @@ def main(argv=None):
             reply = None
         last_stats.update(at=time.monotonic(), reply=reply)
         return reply
+    def pick_account():
+        if not steam_folder or options.name:
+            return choose_account(accounts, options.name)
+        found, entry = steam_account(settings, server, accounts)
+        if not found:
+            print('The account join.py --steam-setup saved for Steam starts is no longer there. Choose one:')
+            return choose_account(accounts)
+        return entry
     if options.dry_run:
-        entry = choose_account(accounts, options.name)
+        entry = pick_account()
         who = entry['name'] if entry else options.name or 'a new account'
         print(f'Would log in to {ip}:{account_port} as {who} (accounts in {folder / "accounts.json"})')
         uid = '<ticket>'
@@ -1796,7 +2183,7 @@ def main(argv=None):
             print(regions)
         if accounts and not options.name and refresh_names(accounts, request):
             save_accounts(folder, accounts)
-        entry = choose_account(accounts, options.name)
+        entry = pick_account()
         uid, _ = login(request, lambda name: plain_name(ip, lobby_port, name), folder, accounts, entry, options.name)
         # What runs on the server now (counts only, no names).
         try:
@@ -1836,6 +2223,14 @@ if __name__ == '__main__':
     except Failure as error:
         print()
         print(f'Could not join: {error}')
+        if '--steam' in sys.argv and not sys.stdout.isatty():
+            # Started by Steam without a terminal: say it where the player sees it.
+            for tool in (['zenity', '--error', '--title=Ring of Elysium', '--text'], ['kdialog', '--title', 'Ring of Elysium', '--error'],
+                         ['notify-send', 'Ring of Elysium']):
+                if shutil.which(tool[0]):
+                    with contextlib.suppress(OSError):
+                        subprocess.call(tool + [f'Could not join: {error}'])
+                    break
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(130)
