@@ -32,14 +32,6 @@ Everything is saved, so next time it's just **Play**.
 
 **Still can't connect?** Check out the [Firewall](#shield-firewall) section.
 
-**Your antivirus flags join-roe-os.cmd?** Use the same thing as separate files instead: download
-all three files of [separate-files](https://github.com/mschnati/roe-os-client/tree/main/separate-files)
-([join-roe-os-window.cmd](https://github.com/mschnati/roe-os-client/blob/main/separate-files/join-roe-os-window.cmd),
-[join-roe-os.ps1](https://github.com/mschnati/roe-os-client/blob/main/separate-files/join-roe-os.ps1),
-[join-roe-os.cmd](https://github.com/mschnati/roe-os-client/blob/main/separate-files/join-roe-os.cmd))
-into one folder and double-click **join-roe-os-window.cmd**. Everything works the same, with the
-same accounts and settings; Start through Steam then names join-roe-os-window.cmd.
-
 ## :globe_with_meridians: Our Server
 
 ### roe-os.de
