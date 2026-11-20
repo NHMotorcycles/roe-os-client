@@ -1,5 +1,5 @@
-# join.cmd's firewall functions (the ADDRESSES answer, the blocked ranges, the trusted servers and
-# when the rules change): parses Source (join.cmd copied to a .ps1), loads its top-level functions
+# join-roe-os.cmd's firewall functions (the ADDRESSES answer, the blocked ranges, the trusted servers and
+# when the rules change): parses Source (join-roe-os.cmd copied to a .ps1), loads its top-level functions
 # and prints OK or FAIL lines. Nothing touches the real firewall.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
@@ -104,7 +104,7 @@ $right = @((& $active 'C:\Game\Europa_Client.exe'), (& $active 'c:\game\other.ex
 $trust = @('203.0.113.5', '198.51.100.7')
 Check 'rules in place: no problem' ((@(Get-RuleProblems $games $right $trust @())).Count -eq 0)
 $p = @(Get-RuleProblems $games @() $trust @())
-Check 'declined prompt: rules missing' ($p.Count -eq 1 -and $p[0] -match '^no join.cmd rule for 2 of 2')
+Check 'declined prompt: rules missing' ($p.Count -eq 1 -and $p[0] -match '^no join-roe-os.cmd rule for 2 of 2')
 $p = @(Get-RuleProblems $games @((& $active 'C:\Game\Europa_Client.exe' 'servers 198.51.100.7'), (& $active 'C:\Game\Other.exe' -Enabled 'False')) $trust @())
 Check 'rule off or old servers' ($p.Count -eq 2 -and $p[0] -match 'is off for 1' -and $p[1] -match 'trust other servers')
 $block = [pscustomobject]@{ Name = '{x}'; DisplayName = 'europa_client.exe'; Program = 'C:\Game\Europa_Client.exe'; Direction = 'Inbound'; Local = $true }
@@ -116,11 +116,11 @@ Check 'rules off: only block rules count' ((@(Get-RuleProblems $games $null $nul
 Check 'notes' ((Get-ElevationNote $null) -eq '' -and (Get-ElevationNote ([pscustomobject]@{ Reason = 'done' })) -eq '' -and
     (Get-ElevationNote ([pscustomobject]@{ Reason = 'declined' })) -match 'declined' -and (Get-ElevationNote ([pscustomobject]@{ Reason = 'not-admin' })) -match 'without administrator rights' -and
     (Get-ElevationNote ([pscustomobject]@{ Reason = 'failed'; Detail = 'Access is denied.' })) -match 'failed: Access is denied')
-$advice = @(Get-FirewallAdvice 'C:\Downloads\join.cmd' @() $false)
-Check 'advice: run as administrator' (($advice -join "`n") -match 'Right-click join.cmd > Run as administrator' -and ($advice -join "`n") -match '"C:\\Downloads\\join.cmd"' -and ($advice -join "`n") -notmatch 'policy')
-$advice = @(Get-FirewallAdvice 'C:\Downloads\join.cmd' @($policy) $true)
+$advice = @(Get-FirewallAdvice 'C:\Downloads\join-roe-os.cmd' @() $false)
+Check 'advice: run as administrator' (($advice -join "`n") -match 'Right-click join-roe-os.cmd > Run as administrator' -and ($advice -join "`n") -match '"C:\\Downloads\\join-roe-os.cmd"' -and ($advice -join "`n") -notmatch 'policy')
+$advice = @(Get-FirewallAdvice 'C:\Downloads\join-roe-os.cmd' @($policy) $true)
 Check 'advice: elevated, policy rule' (($advice -join "`n") -match 'already runs as administrator' -and ($advice -join "`n") -match 'policy or security product' -and ($advice -join "`n") -notmatch 'Right-click')
-# The step itself, without a prompt: a .ps1 copy of join.cmd with -FirewallStep; run directly it
+# The step itself, without a prompt: a .ps1 copy of join-roe-os.cmd with -FirewallStep; run directly it
 # finds no administrator rights (as with User Account Control off on a standard account) unless the
 # test runs elevated; a declined prompt.
 $env:ROE_JOIN_SELF = $Source

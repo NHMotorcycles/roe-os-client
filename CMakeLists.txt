@@ -1,4 +1,4 @@
-# The client side of roe_server: the join scripts (join.cmd, join.py and their
+# The client side of roe_server: the join scripts (join-roe-os.cmd, join-roe-os.py and their
 # tests) and the voice chat DLL (voice/). Builds alone (cmake -S . -B build) or as a
 # subdirectory of the server, whose voice relay uses voice/core (the protocol).
 cmake_minimum_required(VERSION 3.25)
@@ -29,7 +29,7 @@ endif()
 
 add_subdirectory(voice)
 
-# The join scripts: join.py against fake Linux Steam trees; join.cmd through
+# The join scripts: join-roe-os.py against fake Linux Steam trees; join-roe-os.cmd through
 # powershell.exe when run in WSL. The fake Proton is a shell script, so not on Windows.
 if(ROE_BUILD_TESTS AND NOT WIN32)
   find_package(Python3 COMPONENTS Interpreter)

@@ -9,12 +9,12 @@ and ask what they do.
 **You need:** Ring of Elysium from Steam, and this file in a folder of your choice (e.g. your
 desktop). Open the link and click the download arrow at the top right ("Download raw file"):
 
-- [join.cmd](https://github.com/mschnati/roe-os-client/blob/main/join.cmd): the window you start
+- [join-roe-os.cmd](https://github.com/mschnati/roe-os-client/blob/main/join-roe-os.cmd): the window you start
 - Optional, for voice chat: [GCloudVoice.dll](https://github.com/mschnati/roe-os-client/raw/main/voice/GCloudVoice.dll), same folder
 
 **Then:**
 
-1. Double-click **join.cmd**. If Windows warns you: **More info > Run anyway**.
+1. Double-click **join-roe-os.cmd**. If Windows warns you: **More info > Run anyway**.
 2. The server **ROE-OS (roe-os.de)** is already selected, and you see how many people play in
    each region. Another server: **Add server** and enter its address.
 3. **Create a new account** (first time) or pick yours.
@@ -28,7 +28,7 @@ Everything is saved, so next time it's just **Play**.
 
 
 > [!IMPORTANT]
-> **Played with other launchers before?** Many of them change your game files without asking. join.cmd checks this before every start: if it says your game files were changed, verify them in Steam (**Ring of Elysium > Properties > Installed Files > Verify integrity of game files**) and start again.
+> **Played with other launchers before?** Many of them change your game files without asking. join-roe-os.cmd checks this before every start: if it says your game files were changed, verify them in Steam (**Ring of Elysium > Properties > Installed Files > Verify integrity of game files**) and start again.
 
 **Still can't connect?** Check out the [Firewall](#shield-firewall) section.
 
@@ -42,23 +42,23 @@ Everything is saved, so next time it's just **Play**.
 
 ## :arrow_forward: Start through Steam
 
-Want Steam's **Play** button, overlay and playtime? Play once with join.cmd as above, then:
+Want Steam's **Play** button, overlay and playtime? Play once with join-roe-os.cmd as above, then:
 
-1. In join.cmd's window, pick the server and account Steam should use, open **Set up starting
+1. In join-roe-os.cmd's window, pick the server and account Steam should use, open **Set up starting
    through Steam** and click **Set up Start through Steam**.
-2. If Steam is open, join.cmd asks to close it (Steam must be closed for this) and offers to
+2. If Steam is open, join-roe-os.cmd asks to close it (Steam must be closed for this) and offers to
    start it again when it is done.
-3. Press **Play** in Steam. join.cmd's window opens and starts the game after 3 seconds
+3. Press **Play** in Steam. join-roe-os.cmd's window opens and starts the game after 3 seconds
    (**Cancel** stops that). It closes itself when the game exits.
 
-By hand instead: the same section shows the launch option line (`"<path>\join.cmd" --window
+By hand instead: the same section shows the launch option line (`"<path>\join-roe-os.cmd" --window
 %command%`) with a **Copy** button. Paste it in Steam: **Ring of Elysium > Properties > General >
 Launch options** (Steam may stay open for this). Steam's Play then joins the server and account you
 used last.
 
 Another server or account for Steam: select it and click the button again. Wait for **Play**
 instead of starting at once: untick the box below the button. **Turn it off** undoes it. Don't move
-join.cmd afterwards (or set it up again). Linux: `python3 join.py --steam-setup` (no window there).
+join-roe-os.cmd afterwards (or set it up again). Linux: `python3 join-roe-os.py --steam-setup` (no window there).
 
 
 ## :bust_in_silhouette: Your account
@@ -73,7 +73,7 @@ join.cmd afterwards (or set it up again). Linux: `python3 join.py --steam-setup`
 
 ## :microphone: Voice chat
 
-On by default, if **GCloudVoice.dll** is next to join.cmd (or you pick its folder). The game's
+On by default, if **GCloudVoice.dll** is next to join-roe-os.cmd (or you pick its folder). The game's
 own voice servers are gone; this DLL replaces them. It's only put into the game folder while you
 play: the game's original file is saved and put back when the game closes.
 
@@ -84,13 +84,13 @@ play: the game's original file is saved and put back when the game closes.
 The script adds Windows Firewall rules so the game can only talk to the servers you joined and
 your own PC, nothing else on the internet. That's why it asks for administrator approval. Else the game will keep sending analytics data to Tencent.
 
-**Game can't connect?** Right-click **join.cmd > Run as administrator** and try again. If it
+**Game can't connect?** Right-click **join-roe-os.cmd > Run as administrator** and try again. If it
 still fails, the window tells you why under **Details**. Its probably because another launcher you used set some weird firewall settings.
 
 ## :penguin: Linux
 
-Download [join.py](https://github.com/mschnati/roe-os-client/blob/main/join.py) and run
-`python3 join.py` in a terminal. It finds the game in Steam and starts it with Proton. Same
+Download [join-roe-os.py](https://github.com/mschnati/roe-os-client/blob/main/join-roe-os.py) and run
+`python3 join-roe-os.py` in a terminal. It finds the game in Steam and starts it with Proton. Same
 servers, accounts and voice chat as on Windows (no firewall step).
 
 ## :gear: Server admins (GM accounts)
@@ -101,8 +101,8 @@ as that account. No password: the link works once, for one minute.
 
 ## More
 
-- **Console version:** the same join.cmd, started in a command prompt (with or without
-  arguments, or `join.cmd --console`), has commands and options for advanced users.
+- **Console version:** the same join-roe-os.cmd, started in a command prompt (with or without
+  arguments, or `join-roe-os.cmd --console`), has commands and options for advanced users.
 - **Details, building and testing:** [DEVELOPMENT.md](DEVELOPMENT.md)
 - **Changes:** [CHANGELOG.md](CHANGELOG.md)
 - **The server:** [ring-of-elysium-open-source](https://github.com/mschnati/ring-of-elysium-open-source)

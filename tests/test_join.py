@@ -1,5 +1,5 @@
-"""join.py against fake Steam trees and game folders: roots, libraries, game, prefix, the Proton choice, the voice DLL and the
-account and server menus; join.cmd's voice DLL, account and server functions through powershell.exe."""
+"""join-roe-os.py against fake Steam trees and game folders: roots, libraries, game, prefix, the Proton choice, the voice DLL and the
+account and server menus; join-roe-os.cmd's voice DLL, account and server functions through powershell.exe."""
 import argparse
 import contextlib
 import importlib.util
@@ -15,7 +15,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-JOIN = Path(__file__).resolve().parents[1] / 'join.py'
+JOIN = Path(__file__).resolve().parents[1] / 'join-roe-os.py'
 spec = importlib.util.spec_from_file_location('join', JOIN)
 join = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(join)
@@ -553,7 +553,7 @@ class AccountMenu(unittest.TestCase):
         self.assertIsNone(join.choose_account([], choose=no_menu))   # first start: no menu
 
     def test_accounts_json_with_byte_order_mark(self):
-        # join.cmd's file may start with a byte order mark; entries without a valid key and name are skipped.
+        # join-roe-os.cmd's file may start with a byte order mark; entries without a valid key and name are skipped.
         self.folder.mkdir(parents=True)
         rows = [{'name': 'Anna', 'token': T1, 'last_used': 1}, {'name': 'Bob', 'token': T2, 'last_used': 2},
                 {'name': 'Bad', 'token': 'x', 'last_used': 3}, {'name': 'Dora', 'token': '', 'last_used': 0}, {'token': ''}]
@@ -711,11 +711,11 @@ class ServerMenu(unittest.TestCase):
         self.assertIsNone(join.version_notice(f'OK min=0.9 current=0.9.0 {github} later=x', '0.9'))
         self.assertIsNone(join.version_notice(f'OK min=bad current=x {github}', '0.9'))
         self.assertEqual(join.version_notice(f'OK min=0.9 current=0.10 {github}', '0.9'),
-                         'A newer join.py (version 0.10) is at https://github.com/mschnati/roe-os-client; this one (version 0.9) still works.')
+                         'A newer join-roe-os.py (version 0.10) is at https://github.com/mschnati/roe-os-client; this one (version 0.9) still works.')
         with self.assertRaises(join.Failure) as stop:
             join.version_notice('OK min=1.0 current=1.0 url=https%3A%2F%2Fexample.org%2Froe', '0.9')
-        self.assertEqual(str(stop.exception), 'This join.py is version 0.9; the server needs version 1.0 or newer. '
-                                              'Download the new join.py from https://example.org/roe and start it again.')
+        self.assertEqual(str(stop.exception), 'This join-roe-os.py is version 0.9; the server needs version 1.0 or newer. '
+                                              'Download the new join-roe-os.py from https://example.org/roe and start it again.')
         with self.assertRaises(join.Failure) as stop:
             join.version_notice('OK min=1 current=1 url=javascript%3Ax%0A', '0.9')
         self.assertIn('from https://github.com/mschnati/roe-os-client and', str(stop.exception))
@@ -733,9 +733,9 @@ class ServerMenu(unittest.TestCase):
         self.assertEqual(join.server_folder_name(server), 'play.example.org')
 
     def test_versions_agree(self):
-        # join.cmd and join.py carry the same version and URL.
+        # join-roe-os.cmd and join-roe-os.py carry the same version and URL.
         root = JOIN.parent
-        cmd = (root / 'join.cmd').read_text()
+        cmd = (root / 'join-roe-os.cmd').read_text()
         self.assertEqual(re.search(r"^\$joinVersion = '([0-9.]+)'", cmd, re.M).group(1), join.JOIN_VERSION)
         self.assertIn(f"$joinUrl = '{join.JOIN_URL}'", cmd)
         # The server's too, when this folder is inside the server's repository (client/).
@@ -817,7 +817,7 @@ class ServerMenu(unittest.TestCase):
 
 
 def run_powershell(test, harness, prepare, checks):
-    """Runs a join.cmd harness through powershell.exe in a Windows temp folder; asserts its OK lines."""
+    """Runs a join-roe-os.cmd harness through powershell.exe in a Windows temp folder; asserts its OK lines."""
     # On a Windows drive: File.Replace (Copy-Checked) does not work on the WSL share.
     temp = subprocess.run(['cmd.exe', '/c', 'echo %TEMP%'], cwd='/mnt/c', capture_output=True, text=True).stdout.strip()
     temp = subprocess.run(['wslpath', '-u', temp], capture_output=True, text=True).stdout.strip()
@@ -827,7 +827,7 @@ def run_powershell(test, harness, prepare, checks):
         base = Path(tmp)
         prepare(base)
         source = base / 'join.ps1'
-        shutil.copyfile(JOIN.parent / 'join.cmd', source)
+        shutil.copyfile(JOIN.parent / 'join-roe-os.cmd', source)
 
         def win(path):
             return subprocess.run(['wslpath', '-w', str(path)], capture_output=True, text=True, check=True).stdout.strip()
@@ -844,31 +844,31 @@ def run_powershell(test, harness, prepare, checks):
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdAccounts(unittest.TestCase):
-    """join.cmd's account menu, accounts.json and login against a fake service (through powershell.exe)."""
+    """join-roe-os.cmd's account menu, accounts.json and login against a fake service (through powershell.exe)."""
     def test_functions(self):
         run_powershell(self, 'join_cmd_accounts.ps1', lambda base: None, 40)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdServers(unittest.TestCase):
-    """join.cmd's server menu, the servers list and -Server (through powershell.exe)."""
+    """join-roe-os.cmd's server menu, the servers list and -Server (through powershell.exe)."""
     def test_functions(self):
         run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 51)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdFirewall(unittest.TestCase):
-    """join.cmd's ADDRESSES parsing, blocked ranges, trusted servers and rule updates (through powershell.exe)."""
+    """join-roe-os.cmd's ADDRESSES parsing, blocked ranges, trusted servers and rule updates (through powershell.exe)."""
     def test_functions(self):
         run_powershell(self, 'join_cmd_firewall.ps1', lambda base: None, 49)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdExport(unittest.TestCase):
-    """join.cmd's account backup: export, import, merge and a different certificate (through powershell.exe)."""
+    """join-roe-os.cmd's account backup: export, import, merge and a different certificate (through powershell.exe)."""
     def test_functions(self):
         def prepare(base):
-            # A backup written by join.py, for join.cmd's import.
+            # A backup written by join-roe-os.py, for join-roe-os.cmd's import.
             root = base / 'py'
             join.save_accounts(root / 'linux.example', [{'name': 'Penny', 'token': 'f' * 64, 'last_used': 7}])
             (root / 'linux.example/server.pin').write_text('4' * 64 + '\n', encoding='ascii')
@@ -877,7 +877,7 @@ class JoinCmdExport(unittest.TestCase):
 
 
 class AccountBackup(unittest.TestCase):
-    """join.py's --export / --import: the same file as join.cmd's, merged, a different certificate asked."""
+    """join-roe-os.py's --export / --import: the same file as join-roe-os.cmd's, merged, a different certificate asked."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.base = Path(self.tmp.name)
@@ -927,7 +927,7 @@ class AccountBackup(unittest.TestCase):
         self.assertEqual((done['added'], done['updated']), (0, 0))
 
     def test_join_cmd_file_and_refusals(self):
-        # A file as join.cmd writes it (BOM-less UTF-8, its own layout) and unsafe or foreign files.
+        # A file as join-roe-os.cmd writes it (BOM-less UTF-8, its own layout) and unsafe or foreign files.
         backup = self.base / 'cmd.json'
         backup.write_text(json.dumps({'format': 'roe-join-accounts', 'version': 1, 'servers': [
             {'address': 'Play.Example.org', 'name': 'Europa', 'pin': '1' * 64, 'accounts': [{'name': 'Anna', 'token': 'a' * 64, 'last_used': 5}]},
@@ -951,7 +951,7 @@ class AccountBackup(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdVoice(unittest.TestCase):
-    """join.cmd parses, and its voice DLL functions work on fake folders (through powershell.exe)."""
+    """join-roe-os.cmd parses, and its voice DLL functions work on fake folders (through powershell.exe)."""
     def test_functions(self):
         def prepare(base):
             ours = fake_dll(b'GetVoiceEngine our voice dll')
@@ -979,7 +979,7 @@ def fake_install(base):
 
 
 class GameFiles(unittest.TestCase):
-    """join.py's game file check on a fake install whose files stand for the originals."""
+    """join-roe-os.py's game file check on a fake install whose files stand for the originals."""
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.base = Path(self.tmp.name)
@@ -1002,8 +1002,8 @@ class GameFiles(unittest.TestCase):
         self.assertEqual(len(real.ORIGINAL_FILES), 7)
         self.assertTrue(all(re.fullmatch('[0-9a-f]{64}', sha) and size > 0 for _, size, sha in real.ORIGINAL_FILES))
         self.assertEqual(len(real.ORIGINAL_VOICE_SHA), 2)
-        # The same files and hashes as join.cmd's.
-        cmd = (JOIN.parent / 'join.cmd').read_text()
+        # The same files and hashes as join-roe-os.cmd's.
+        cmd = (JOIN.parent / 'join-roe-os.cmd').read_text()
         for rel, size, sha in real.ORIGINAL_FILES:
             self.assertIn(f"@{{ Path = '{rel.replace('/', chr(92))}'; Size = {size}; Sha = '{sha}' }}", cmd)
         for sha in real.ORIGINAL_VOICE_SHA:
@@ -1116,14 +1116,14 @@ class GameFiles(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdFiles(unittest.TestCase):
-    """join.cmd's game file check: original, changed, missing and added files, XVersion, the cache and the question."""
+    """join-roe-os.cmd's game file check: original, changed, missing and added files, XVersion, the cache and the question."""
     def test_functions(self):
         run_powershell(self, 'join_cmd_files.ps1', fake_install, 26)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinGui(unittest.TestCase):
-    """join.cmd's window: its code loads, its windows parse, its worker and its server and play steps (no window shown)."""
+    """join-roe-os.cmd's window: its code loads, its windows parse, its worker and its server and play steps (no window shown)."""
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
@@ -1132,7 +1132,7 @@ class JoinGui(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
 class JoinCmdStart(unittest.TestCase):
-    """join.cmd's batch part: the window for a double-click (cmd.exe /c, no arguments) or --window,
+    """join-roe-os.cmd's batch part: the window for a double-click (cmd.exe /c, no arguments) or --window,
     the console with arguments, --console or typed in a prompt."""
     def run_batch(self, base, line):
         # The line typed into a command prompt (cmd.exe without /c); cmd /c ""<file>" " is how
@@ -1148,7 +1148,7 @@ class JoinCmdStart(unittest.TestCase):
         temp = subprocess.run(['wslpath', '-u', temp], capture_output=True, text=True).stdout.strip()
         if not temp or not Path(temp).is_dir():
             self.skipTest('no Windows temp folder')
-        batch = (JOIN.parent / 'join.cmd').read_text().split('#>')[0]
+        batch = (JOIN.parent / 'join-roe-os.cmd').read_text().split('#>')[0]
         # The two PowerShell starts print what they would start instead.
         window = 'start "" /min powershell.exe '
         wait = '\n  powershell.exe '
@@ -1159,8 +1159,8 @@ class JoinCmdStart(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=temp) as tmp:
             base = Path(tmp) / 'a b!c'
             base.mkdir()
-            (base / 'join.cmd').write_text(batch.replace('\n', '\r\n'), newline='')
-            path = subprocess.run(['wslpath', '-w', str(base / 'join.cmd')], capture_output=True, text=True, check=True).stdout.strip()
+            (base / 'join-roe-os.cmd').write_text(batch.replace('\n', '\r\n'), newline='')
+            path = subprocess.run(['wslpath', '-w', str(base / 'join-roe-os.cmd')], capture_output=True, text=True, check=True).stdout.strip()
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" "'), ['MODE window'])
             self.assertEqual(self.run_batch(base, f'cmd /C ""{path}""'), ['MODE window'])
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window"'), ['MODE window'])
@@ -1171,16 +1171,16 @@ class JoinCmdStart(unittest.TestCase):
             self.assertEqual(self.run_batch(base, f'"{path}"'), ['MODE console []'])
             self.assertEqual(self.run_batch(base, f'"{path}" export'), ['MODE console [export]'])
             self.assertEqual(self.run_batch(base, f'"{path}" --window'), ['MODE window'])
-            # Started by Steam ("<join.cmd>" %command%): Windows runs a .cmd as cmd /c "<the line>".
+            # Started by Steam ("<join-roe-os.cmd>" %command%): Windows runs a .cmd as cmd /c "<the line>".
             steam = r'"C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\SLauncher.exe" -steam -maintenance'
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" {steam}"'), [f'MODE console [{steam}]'])
-            # The window's launch option ("<join.cmd>" --window %command%): the window, waited for.
+            # The window's launch option ("<join-roe-os.cmd>" --window %command%): the window, waited for.
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window {steam} -windowed"'), [f'MODE window-wait [--window {steam} -windowed]'])
             self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --windowed"'), ['MODE console [--windowed]'])
             # PowerShell runs a .ps1 copy of the file (-File), written without the download's mark.
             copies = list((base / 'roe-join').glob('run-*.ps1'))
             self.assertTrue(copies)
-            self.assertEqual(copies[0].read_bytes(), (base / 'join.cmd').read_bytes())
+            self.assertEqual(copies[0].read_bytes(), (base / 'join-roe-os.cmd').read_bytes())
 
 
 # A localconfig.vdf as Steam writes it (tabs, LF), cut down: the game's block without launch
@@ -1215,7 +1215,7 @@ SAMPLE_VDF = '''"UserLocalConfigStore"
 \t}
 }
 '''
-STEAM_LINE = r'"C:\Users\A B\Desktop\join.cmd" %command%'
+STEAM_LINE = r'"C:\Users\A B\Desktop\join-roe-os.cmd" %command%'
 
 
 def steam_tree(home, vdf=SAMPLE_VDF, user='30642568'):
@@ -1264,7 +1264,7 @@ class SteamLaunch(unittest.TestCase):
 
     def test_steam_profile(self):
         accounts = [{'name': 'Anna', 'token': 'a' * 64, 'last_used': 9}, {'name': 'Bob', 'token': 'b' * 64, 'last_used': 5}]
-        self.assertEqual(join.account_id('a' * 64), 'ffe054fe7ae0cb6d')   # join.cmd's Get-AccountId agrees
+        self.assertEqual(join.account_id('a' * 64), 'ffe054fe7ae0cb6d')   # join-roe-os.cmd's Get-AccountId agrees
         settings = {'servers': [{'address': 'old.example', 'last_used': 1}, {'address': 'new.example', 'last_used': 7}]}
         self.assertEqual(join.steam_server(settings), 'new.example')
         self.assertEqual(join.steam_server(settings, 'given.example'), 'given.example')
@@ -1283,7 +1283,7 @@ class SteamLaunch(unittest.TestCase):
         added = join.set_launch_options(SAMPLE_VDF, STEAM_LINE)
         self.assertEqual(join.launch_options(added), STEAM_LINE)
         # Only one line more, in the game's block, escaped as Steam does.
-        line = '\t\t\t\t\t\t"LaunchOptions"\t\t"\\"C:\\\\Users\\\\A B\\\\Desktop\\\\join.cmd\\" %command%"\n'
+        line = '\t\t\t\t\t\t"LaunchOptions"\t\t"\\"C:\\\\Users\\\\A B\\\\Desktop\\\\join-roe-os.cmd\\" %command%"\n'
         self.assertEqual(added, SAMPLE_VDF.replace('"60437"\n', '"60437"\n' + line))
         changed = join.set_launch_options(added, '-dx11')
         self.assertEqual(changed, SAMPLE_VDF.replace('"60437"\n', '"60437"\n\t\t\t\t\t\t"LaunchOptions"\t\t"-dx11"\n'))
@@ -1329,15 +1329,15 @@ class SteamLaunch(unittest.TestCase):
             settings = {}
             try:
                 join.steam_setup_command(options, settings, home=self.base / 'home', question=Answers(*answers),
-                                         running=lambda: running, script='/games/roe/join.py')
+                                         running=lambda: running, script='/games/roe/join-roe-os.py')
             finally:
                 self.said = out.getvalue()
         return settings
 
     def test_setup(self):
         path = steam_tree(self.base / 'home')
-        line = 'python3 "/games/roe/join.py" --steam %command%'
-        self.assertEqual(join.steam_launch_line('/games/roe/join.py'), line)
+        line = 'python3 "/games/roe/join-roe-os.py" --steam %command%'
+        self.assertEqual(join.steam_launch_line('/games/roe/join-roe-os.py'), line)
         with self.assertRaises(join.Failure) as refused:
             self.setup('--steam-setup', running=True)
         self.assertIn('Steam is running', str(refused.exception))
@@ -1356,6 +1356,17 @@ class SteamLaunch(unittest.TestCase):
         self.setup('--steam-setup', 'off')
         self.assertIn('not ours', self.said)
         self.assertEqual(join.launch_options(path.read_text(encoding='utf-8')), '-dx11')
+        # A line set up before the rename (the old join.py) is ours: setup replaces it, off removes it.
+        old = 'python3 "/games/roe/join.py" --steam %command%'
+        self.assertTrue(join.is_ours(old) and join.is_ours('"C:\\x\\join.cmd" %command%') and join.is_ours(line))
+        self.assertFalse(join.is_ours('-dx11'))
+        path.write_text(join.set_launch_options(SAMPLE_VDF, old), encoding='utf-8')
+        self.setup('--steam-setup')
+        self.assertIn('Replacing', self.said)
+        self.assertEqual(join.launch_options(path.read_text(encoding='utf-8')), line)
+        path.write_text(join.set_launch_options(SAMPLE_VDF, old), encoding='utf-8')
+        self.setup('--steam-setup', 'off')
+        self.assertIsNone(join.launch_options(path.read_text(encoding='utf-8')))
 
     def test_setup_profile(self):
         steam_tree(self.base / 'home')
@@ -1409,8 +1420,8 @@ class SteamLaunch(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdSteam(unittest.TestCase):
-    """join.cmd's start through Steam: the command line, the game folder, the profile and the
-    launch options in localconfig.vdf, the same as join.py's (through powershell.exe)."""
+    """join-roe-os.cmd's start through Steam: the command line, the game folder, the profile and the
+    launch options in localconfig.vdf, the same as join-roe-os.py's (through powershell.exe)."""
     def test_functions(self):
         def prepare(base):
             (base / 'sample.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
@@ -1429,7 +1440,7 @@ class JoinCmdSteam(unittest.TestCase):
                   % (30642568 + join.STEAM_ID64_BASE))
             touch(base / 'game/Europa_Client.exe')
             touch(base / 'game/XVersion/Europa_Client.exe')
-        run_powershell(self, 'join_cmd_steam.ps1', prepare, 50)
+        run_powershell(self, 'join_cmd_steam.ps1', prepare, 53)
 
 
 if __name__ == '__main__':

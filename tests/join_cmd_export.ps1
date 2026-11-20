@@ -1,5 +1,5 @@
-# join.cmd's account backup (export, import, merge, a different certificate) in the folder Base:
-# parses Source (join.cmd copied to a .ps1), loads its top-level functions and prints OK or FAIL lines.
+# join-roe-os.cmd's account backup (export, import, merge, a different certificate) in the folder Base:
+# parses Source (join-roe-os.cmd copied to a .ps1), loads its top-level functions and prints OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
 $tokens = $null
@@ -87,7 +87,7 @@ $refused = $false
 try { Import-Accounts $fresh ([pscustomobject]@{ client = '' }) $bad | Out-Null } catch { $refused = $_.Exception.Message -like '*no account backup*' }
 Check 'other file refused' $refused
 
-# A backup that join.py wrote (prepared by test_join.py) imports here too.
+# A backup that join-roe-os.py wrote (prepared by test_join.py) imports here too.
 $r = Import-Accounts (Join-Path $Base 'four\roe-join') ([pscustomobject]@{ client = '' }) (Join-Path $Base 'py-backup.json')
 $py = Read-Accounts (Join-Path $Base 'four\roe-join\linux.example')
-Check 'join.py backup' ($r.Added -eq 1 -and $py[0].name -ceq 'Penny' -and $py[0].token -eq ('f' * 64) -and $r.Servers[0].name -ceq 'Linux EU')
+Check 'join-roe-os.py backup' ($r.Added -eq 1 -and $py[0].name -ceq 'Penny' -and $py[0].token -eq ('f' * 64) -and $r.Servers[0].name -ceq 'Linux EU')

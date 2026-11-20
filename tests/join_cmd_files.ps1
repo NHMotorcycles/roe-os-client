@@ -1,5 +1,5 @@
-# join.cmd's game file check against the fake game folder test_join.py made in Base (original
-# files, then changed, missing and added ones; the hash cache): parses Source (join.cmd copied to
+# join-roe-os.cmd's game file check against the fake game folder test_join.py made in Base (original
+# files, then changed, missing and added ones; the hash cache): parses Source (join-roe-os.cmd copied to
 # a .ps1), loads its top-level functions and prints OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
@@ -11,7 +11,7 @@ if ($errors.Count) { foreach ($e in $errors) { "FAIL parse: $e" }; exit 2 }
 foreach ($f in @($ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] })) {
     . ([ScriptBlock]::Create($f.Extent.Text))
 }
-# join.cmd's own lists: the real install's sizes and hashes.
+# join-roe-os.cmd's own lists: the real install's sizes and hashes.
 foreach ($s in @($ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -in @('$originalFiles', '$originalVoiceSha', '$addedFiles') })) {
     . ([ScriptBlock]::Create($s.Extent.Text))
 }

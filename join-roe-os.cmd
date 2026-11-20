@@ -13,9 +13,9 @@ set "ROE_JOIN_PS1=%APPDATA%\roe-join\run-%RANDOM%%TIME:~-2%%RANDOM%.ps1"
 type "%~f0" > "%ROE_JOIN_PS1%" || goto :no_script
 setlocal EnableDelayedExpansion
 rem The window: no arguments and not typed in a command prompt (a double-click, a shortcut and
-rem PowerShell run cmd.exe /c "...join.cmd"; the cmd.exe of a prompt has no /c), or --window.
+rem PowerShell run cmd.exe /c "...join-roe-os.cmd"; the cmd.exe of a prompt has no /c), or --window.
 rem A copy of cmdcmdline: the dynamic variable itself takes no :old=new.
-rem --window with more after it (Steam's launch option "<join.cmd>" --window %command%): the window
+rem --window with more after it (Steam's launch option "<join-roe-os.cmd>" --window %command%): the window
 rem with that command line, and this waits for it, so Steam sees the game running until it exits.
 rem The window hides this console itself.
 set "ROE_JOIN_LINE=!cmdcmdline!"
@@ -43,7 +43,7 @@ if not "!ROE_JOIN_EXIT!"=="0" (
 )
 exit /b !ROE_JOIN_EXIT!
 :no_script
-echo join.cmd could not write its script into "%APPDATA%\roe-join".
+echo join-roe-os.cmd could not write its script into "%APPDATA%\roe-join".
 pause
 exit /b 1
 #>
@@ -59,13 +59,13 @@ exit /b 1
 # (export, import) and the log; for an account with GM rights on the selected server (ROLE) also
 # "Open the admin page" (for others it is not shown; the server checks the rights again).
 #
-# In a command prompt it is the console version: join.cmd with the arguments below, or typed
-# without any, works in the prompt. join.cmd --console forces the console (for example from
-# PowerShell, whose .\join.cmd counts as a double-click), join.cmd --window the window. Both run
+# In a command prompt it is the console version: join-roe-os.cmd with the arguments below, or typed
+# without any, works in the prompt. join-roe-os.cmd --console forces the console (for example from
+# PowerShell, whose .\join-roe-os.cmd counts as a double-click), join-roe-os.cmd --window the window. Both run
 # the same functions below and share the settings, accounts and keys (%APPDATA%\roe-join.json,
 # %APPDATA%\roe-join\).
 #
-# The window asks join.cmd's questions as dialogs and shows its messages in the status line. The
+# The window asks join-roe-os.cmd's questions as dialogs and shows its messages in the status line. The
 # network, the firewall step (with the Windows administrator prompt) and the wait for the game run
 # in a background runspace, so the window never freezes. What happened is in
 # %APPDATA%\roe-join\gui.log ("Open the log", or "Details"). Windows PowerShell 5.1 and .NET
@@ -80,70 +80,70 @@ exit /b 1
 # then keeps the game from reaching anything but the servers joined so far and the addresses
 # each server names for its matches (Windows Firewall, asks for administrator approval only
 # when the allowed addresses change), logs in to the server and starts the game. Answers are remembered in %APPDATA%\roe-join.json (the servers with their name and last use
-# in "servers"). join.cmd -Server <address> joins that server without the menu.
+# in "servers"). join-roe-os.cmd -Server <address> joins that server without the menu.
 #
 # Accounts: a new account gets a secret key from the server. The keys are kept with each
 # account's current name in %APPDATA%\roe-join\<server>\accounts.json; copy that folder to play
 # with the same accounts on another computer. With first-login on, the server names a new
 # account (newaccount and 4 digits, for example newaccount1234) and the game asks for the real
-# name; otherwise join.cmd asks for it. join.cmd -Name <name> picks the saved account of that
+# name; otherwise join-roe-os.cmd asks for it. join-roe-os.cmd -Name <name> picks the saved account of that
 # name, or claims the name for a new one, without the menu. The server's certificate is
 # remembered on first contact (server.pin there) and a different one is refused.
 #
 # The firewall rules are optional (asked once). From a command prompt:
-#   join.cmd firewall          shows the rules, the trusted servers, whether Windows applies them
+#   join-roe-os.cmd firewall          shows the rules, the trusted servers, whether Windows applies them
 #                              and where a running game is connected
-#   join.cmd firewall on|off   rules from the next join on, or none (removes this folder's rules)
-#   join.cmd firewall reset    removes the rules of every game folder and forgets the servers;
+#   join-roe-os.cmd firewall on|off   rules from the next join on, or none (removes this folder's rules)
+#   join-roe-os.cmd firewall reset    removes the rules of every game folder and forgets the servers;
 #                              the next join trusts only its own server
-# After the step join.cmd checks that the rules apply and that no block rule of another program
+# After the step join-roe-os.cmd checks that the rules apply and that no block rule of another program
 # names the game (those are removed with the step). When something is wrong (the prompt declined
 # or never shown, the step failed, a policy rule) it says what to do and asks before the game
 # starts. Run as administrator, it sets the rules without a prompt.
 #
-# Voice chat (on by default, asked once; join.cmd voice on|off changes it): our GCloudVoice.dll
+# Voice chat (on by default, asked once; join-roe-os.cmd voice on|off changes it): our GCloudVoice.dll
 # replaces the game's while the game runs. It comes from voice\ next to this file, or from the
-# folder the player gave (asked when it is missing and by join.cmd voice on; saved as voice_dll,
+# folder the player gave (asked when it is missing and by join-roe-os.cmd voice on; saved as voice_dll,
 # then used without asking). The original is kept with its hash in
 # %APPDATA%\roe-join\voice-backup\ and put back when the game exits, or at the next start after a
 # crash or a closed window.
 #
-# Game files: before a join, join.cmd checks the files other launchers and lobby patchers change
+# Game files: before a join, join-roe-os.cmd checks the files other launchers and lobby patchers change
 # (the .sfc archives they append to, the lobby caches, GCloudVoice.dll) against the Steam install
 # and looks for files a clean install does not have (proxy DLLs such as dinput8.dll, data_exp.vfs).
 # When one differs it says which and how to repair it (Steam's Verify integrity of game files),
 # and starts the game only when the player chooses to start anyway. The hashes are kept by size
 # and write time in %APPDATA%\roe-join\file-check.json, so only the first start hashes the files.
-# join.cmd --skip-file-check leaves the check out.
+# join-roe-os.cmd --skip-file-check leaves the check out.
 #
 # The server can name the oldest version of this script it takes (VERSION); an older one stops
 # before the game starts and says where to get the new one.
 #
-# GM accounts: join.cmd admin (with -Server and -Name as for a join) opens the server's admin page in
+# GM accounts: join-roe-os.cmd admin (with -Server and -Name as for a join) opens the server's admin page in
 # the browser with a one-time login link (ROLE, then WEB; the server sends the page's address or
 # it is https://admin.<the server's domain>). Other accounts are told they have no GM rights.
 #
-# Steam: with the launch option "<this file>" %command% Steam's Play button starts join.cmd with the
-# game's command line; it joins the server and account of join.cmd steam-setup (else the last used
-# ones) and starts the game itself. join.cmd [-Server <address>] [-Name <name>] steam-setup [off]
+# Steam: with the launch option "<this file>" %command% Steam's Play button starts join-roe-os.cmd with the
+# game's command line; it joins the server and account of join-roe-os.cmd steam-setup (else the last used
+# ones) and starts the game itself. join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off]
 # prints the line and sets (or removes) it in Steam while Steam is closed. The window's section
 # "Set up starting through Steam" shows "<this file>" --window %command% to paste (Copy) and sets
 # it (closing Steam first when the player agrees): Steam's Play button then opens the window,
 # which joins the server and account saved there and closes itself when the game exits.
 #
-# Account backup: join.cmd export [FILE] writes every server's accounts (their keys), certificate
-# pin and name into one file (default roe-join-accounts.json here); join.cmd import FILE merges
-# one into this computer. join.py reads and writes the same file (--export, --import).
+# Account backup: join-roe-os.cmd export [FILE] writes every server's accounts (their keys), certificate
+# pin and name into one file (default roe-join-accounts.json here); join-roe-os.cmd import FILE merges
+# one into this computer. join-roe-os.py reads and writes the same file (--export, --import).
 #
 # Nothing else in the game folder is changed.
 
-# The administrator step of the firewall rules: join.cmd starts this file (a .ps1 copy of it) as
+# The administrator step of the firewall rules: join-roe-os.cmd starts this file (a .ps1 copy of it) as
 # administrator with -FirewallStep and a file that names the rules to create and remove.
 param([string]$FirewallStep = '')
 $ErrorActionPreference = 'Stop'
 # Tested Europa_Client.exe builds of 2022-0.2.989.0 x64: the root folder (DX11) and XVersion (DX12).
 $expectedSha = @('2dca9b1e122e21363e14eeeb2372598c773205a907ed8d2b2d54a7229ad6ba18', 'e076dddcab4b48d52b920a84bbee125c8b452900ae90cea2f190f2e3654ff81d')
-# This script's version; the server can ask for a newer one (VERSION). The same number as join.py's
+# This script's version; the server can ask for a newer one (VERSION). The same number as join-roe-os.py's
 # and roe_server's (src/lobby/accounts.hpp kJoinScriptVersion).
 $joinVersion = '1.0'
 $joinUrl = 'https://github.com/mschnati/roe-os-client'
@@ -155,7 +155,7 @@ $joinRoot = Join-Path $env:APPDATA 'roe-join'
 # roe-join.json as the console and the window write it.
 function Save-JoinSettings([string]$Client, $Firewall, $Voice, $VoiceDll, $Servers) {
     $values = [ordered]@{ client = $Client; firewall = $Firewall; voice = $Voice; voice_dll = $VoiceDll; servers = @($Servers) }
-    # The Steam profile (join.cmd steam-setup) stays.
+    # The Steam profile (join-roe-os.cmd steam-setup) stays.
     $steam = $null
     try { if (Test-Path -LiteralPath $settingsPath) { $steam = (Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json).steam } } catch { }
     if ($steam) { $values.steam = $steam }
@@ -332,9 +332,9 @@ function Assert-GameClosed([string[]]$Programs) {
 function Test-Administrator {
     try { return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) } catch { return $false }
 }
-# Runs a firewall step as administrator: directly when join.cmd runs as one, else through a
+# Runs a firewall step as administrator: directly when join-roe-os.cmd runs as one, else through a
 # Windows prompt. The step is data (Create: rules with Name, Group, Description, Program and
-# RemoteAddress; Remove: rule names) in a file that a .ps1 copy of join.cmd reads with
+# RemoteAddress; Remove: rule names) in a file that a .ps1 copy of join-roe-os.cmd reads with
 # -FirewallStep (Invoke-FirewallStep). Returns Ok and Reason: done; declined (the prompt said no,
 # or Windows denies it on this account); not-admin (it ran without administrator rights, User
 # Account Control off on a standard account); failed (Detail: the error); no-start (Windows did
@@ -445,9 +445,9 @@ function Get-RuleProblems([string[]]$Programs, $Own, [string[]]$Wanted, $Blockin
             if (-not $on.Count) { $off += $program; continue }
             if (-not @($on | Where-Object { (@(Get-TrustedServers @($_) | Sort-Object -Unique) -join ' ') -eq $want }).Count) { $stale += $program }
         }
-        if ($missing.Count) { $problems += "no join.cmd rule for $($missing.Count) of $($Programs.Count) game programs (for example $(Split-Path -Leaf $missing[0]))" }
-        if ($off.Count) { $problems += "the join.cmd rule is off for $($off.Count) game programs" }
-        if ($stale.Count) { $problems += "the join.cmd rules of $($stale.Count) game programs trust other servers than $($Wanted -join ', ')" }
+        if ($missing.Count) { $problems += "no join-roe-os.cmd rule for $($missing.Count) of $($Programs.Count) game programs (for example $(Split-Path -Leaf $missing[0]))" }
+        if ($off.Count) { $problems += "the join-roe-os.cmd rule is off for $($off.Count) game programs" }
+        if ($stale.Count) { $problems += "the join-roe-os.cmd rules of $($stale.Count) game programs trust other servers than $($Wanted -join ', ')" }
     }
     foreach ($rule in @($Blocking | Where-Object { $_ })) {
         $where = if ($rule.Local) { 'a local rule' } else { 'a rule of a policy or security product' }
@@ -463,13 +463,13 @@ function Get-FirewallAdvice([string]$Self, $Blocking, [bool]$Admin) {
         $lines += 'Remove or turn off the rules of the policy or security product where they come from (or ask who manages this PC).'
     }
     if ($Admin) {
-        $lines += 'join.cmd already runs as administrator: check the error above, or run "join.cmd firewall" to see the rules.'
+        $lines += 'join-roe-os.cmd already runs as administrator: check the error above, or run "join-roe-os.cmd firewall" to see the rules.'
     } else {
-        $lines += 'Right-click join.cmd > Run as administrator, or in a command prompt opened with "Run as administrator":'
+        $lines += 'Right-click join-roe-os.cmd > Run as administrator, or in a command prompt opened with "Run as administrator":'
         $lines += "  `"$Self`""
         $lines += 'On a standard Windows account this needs an administrator''s password.'
     }
-    $lines += 'Or turn the rules off with "join.cmd firewall off" (then the game can reach the internet).'
+    $lines += 'Or turn the rules off with "join-roe-os.cmd firewall off" (then the game can reach the internet).'
     return $lines
 }
 function Get-RuleNames($Rules) {
@@ -478,7 +478,7 @@ function Get-RuleNames($Rules) {
 # A folder's rules of this launcher (Own), and others that block one of its programs (Other):
 # the server launcher's for this folder, ones made for another folder, or local block rules of
 # other programs. Block rules win, so those would block the server too. Fixed: block rules of a
-# policy or security product, which join.cmd cannot remove.
+# policy or security product, which join-roe-os.cmd cannot remove.
 function Get-FolderRules([string]$Client, [string[]]$Programs) {
     $id = Get-FirewallGroup $Client
     $group = "ROE2022-join-$id"
@@ -522,7 +522,7 @@ function Confirm-FirewallState([string]$Client, [string[]]$Programs, [string[]]$
     $note = Get-ElevationNote $Step
     if ($note) { Write-Host $note -ForegroundColor Yellow }
     foreach ($problem in @($problems | Select-Object -First 5)) { Write-Host "  - $problem" -ForegroundColor Yellow }
-    if ($problems.Count -gt 5) { Write-Host "  - and $($problems.Count - 5) more (join.cmd firewall shows them)" -ForegroundColor Yellow }
+    if ($problems.Count -gt 5) { Write-Host "  - and $($problems.Count - 5) more (join-roe-os.cmd firewall shows them)" -ForegroundColor Yellow }
     foreach ($line in (Get-FirewallAdvice $env:ROE_JOIN_SELF $blocking (Test-Administrator))) { Write-Host $line }
     if ((Ask 'Start the game anyway? (y/n)' 'n') -notmatch '^[yY]') { throw 'Cancelled: the firewall rules are not in place.' }
 }
@@ -533,7 +533,7 @@ function Show-Firewall([string]$Client, $Firewall) {
     else { Write-Host 'Windows Firewall runs and applies local rules.' }
     $join = @(Get-NetFirewallRule -Group 'ROE2022-join-*' -ErrorAction SilentlyContinue)
     $local = @(Get-NetFirewallRule -Group 'ROE2022-local-*' -ErrorAction SilentlyContinue)
-    Write-Host ("Rules of join.cmd: $($join.Count) for $(@($join | ForEach-Object { $_.Group } | Sort-Object -Unique).Count) game folders; " +
+    Write-Host ("Rules of join-roe-os.cmd: $($join.Count) for $(@($join | ForEach-Object { $_.Group } | Sort-Object -Unique).Count) game folders; " +
         "of the server launcher: $($local.Count).")
     if (Test-Client $Client) {
         $programs = Get-GamePrograms $Client
@@ -555,7 +555,7 @@ function Show-Firewall([string]$Client, $Firewall) {
         }
     }
     $state = if ($null -eq $Firewall) { 'not asked yet' } elseif ($Firewall) { 'on' } else { 'off' }
-    Write-Host "join.cmd creates rules: $state. Commands: join.cmd firewall on | off | reset"
+    Write-Host "join-roe-os.cmd creates rules: $state. Commands: join-roe-os.cmd firewall on | off | reset"
 }
 # The rules that let a folder's programs reach only this computer and the trusted servers. The
 # new rules are created before the old ones go; if that fails, the new ones are removed again
@@ -582,7 +582,7 @@ function Remove-Rules($Rules, [string]$What) {
 
 # --- Account backup -------------------------------------------------------------------------
 # One JSON file with every server's accounts (names, keys, last use), certificate pin, address and
-# name, the same for join.cmd and join.py: {"format": "roe-join-accounts", "version": 1,
+# name, the same for join-roe-os.cmd and join-roe-os.py: {"format": "roe-join-accounts", "version": 1,
 # "servers": [{"address", "name", "pin", "accounts": [{"name", "token", "last_used"}]}]}.
 $backupFormat = 'roe-join-accounts'
 $backupWarning = 'The file holds your account keys: anyone who has it can play as you. Keep it private.'
@@ -616,7 +616,7 @@ function Export-Accounts([string]$Root, $Settings, [string]$File) {
 function Import-Accounts([string]$Root, $Settings, [string]$File) {
     $backup = Get-Content -LiteralPath $File -Raw -Encoding UTF8 | ConvertFrom-Json
     if ("$($backup.format)" -ne $backupFormat -or -not ($backup.version -is [int] -or $backup.version -is [long]) -or [int64]$backup.version -lt 1) {
-        throw "$File is no account backup of join.cmd or join.py."
+        throw "$File is no account backup of join-roe-os.cmd or join-roe-os.py."
     }
     $servers = @(Read-Servers $Settings)
     $result = [pscustomobject]@{ Servers = $servers; Added = 0; Updated = 0; Skipped = @() }
@@ -670,7 +670,7 @@ $voiceFile = 'GCloudVoice.dll'
 $voiceBackupName = 'roe-join-backup'  # in the game folder: the original DLL
 $joinFolder = Split-Path -Parent "$env:ROE_JOIN_SELF"
 $voiceSource = Join-Path $joinFolder 'voice'
-# Where our DLL is looked for without asking: next to join.cmd, then in its voice folder.
+# Where our DLL is looked for without asking: next to join-roe-os.cmd, then in its voice folder.
 function Get-DefaultVoiceDll {
     foreach ($folder in @(@($joinFolder, $voiceSource) | Where-Object { $_ })) {
         $candidate = Join-Path $folder $voiceFile
@@ -686,8 +686,8 @@ function Get-VoiceBackupFolder([string]$Client) { return Join-Path $voiceBackups
 # it; the record with the hashes stays in %APPDATA%.
 function Get-VoiceOriginal([string]$Client) { return Join-Path (Join-Path $Client $voiceBackupName) $voiceFile }
 function Write-VoiceReadme([string]$Client) {
-    $text = "The game's original $voiceFile, saved by join.cmd before it put in the one for voice chat.`r`n" +
-        "join.cmd puts it back when the game exits. To do it by hand: copy $voiceFile from this folder into`r`n$Client`r`n" +
+    $text = "The game's original $voiceFile, saved by join-roe-os.cmd before it put in the one for voice chat.`r`n" +
+        "join-roe-os.cmd puts it back when the game exits. To do it by hand: copy $voiceFile from this folder into`r`n$Client`r`n" +
         "(replace the file there). Or in Steam: Ring of Elysium > Properties > Installed Files > Verify integrity of game files.`r`n"
     try { Set-Content -LiteralPath (Join-Path (Join-Path $Client $voiceBackupName) 'README.txt') -Value $text -Encoding ASCII -NoNewline } catch { }
 }
@@ -720,7 +720,7 @@ function Restore-Voice([string]$Client, [int]$Wait = 0) {
     # No DLL at all (deleted by hand): the game cannot start without one, so the original goes back.
     $missing = -not (Test-Path -LiteralPath $target -PathType Leaf)
     if ($missing) { $current = $record.installed } else { try { $current = Get-Sha256 $target } catch {
-        Write-Host "Voice chat: cannot read $target ($($_.Exception.Message)). Close the game and start join.cmd again, or: $verifyHint." -ForegroundColor Yellow
+        Write-Host "Voice chat: cannot read $target ($($_.Exception.Message)). Close the game and start join-roe-os.cmd again, or: $verifyHint." -ForegroundColor Yellow
         return $false
     } }
     if ($current -ne $record.installed) { return $true }  # the original is back, or Steam replaced the file
@@ -745,7 +745,7 @@ function Restore-Voice([string]$Client, [int]$Wait = 0) {
         if (-not $problem) { Write-Host "Voice chat: the original $voiceFile is back in $Client."; return $true }
         Start-Sleep -Seconds 1
     }
-    Write-Host "Voice chat: could not put the original $voiceFile back in $Client ($problem). Close the game and start join.cmd again (it puts it back first), or: $verifyHint." -ForegroundColor Yellow
+    Write-Host "Voice chat: could not put the original $voiceFile back in $Client ($problem). Close the game and start join-roe-os.cmd again (it puts it back first), or: $verifyHint." -ForegroundColor Yellow
     return $false
 }
 # At every start: the original back wherever ours was left (a crash or a closed window).
@@ -789,7 +789,7 @@ function Resolve-VoiceDll([string]$Answer) {
 # Our DLL and its hash, asking for its folder where needed: @{ Dll (its full path once found);
 # Asked (Dll was answered); Hash ($null: no voice this time) }.
 function Select-VoiceDll([string]$Dll, [string]$Client, [bool]$AskPath) {
-    # The saved DLL, or when it is gone (or none is saved) the one next to join.cmd.
+    # The saved DLL, or when it is gone (or none is saved) the one next to join-roe-os.cmd.
     if (-not $Dll -or -not (Test-Path -LiteralPath $Dll -PathType Leaf)) { $Dll = Get-DefaultVoiceDll }
     $result = @{ Dll = $Dll; Asked = $false; Hash = $null }
     $offer = ''
@@ -821,7 +821,7 @@ function Select-VoiceDll([string]$Dll, [string]$Client, [bool]$AskPath) {
 # Voice chat for this start: @{ Voice (to save: $true, $false, or $null to ask again next start);
 # Dll (to save as voice_dll); Pick (Select-VoiceDll's answer, $null: no voice) }. On by default:
 # asked once (Enter: yes). A yes with a DLL found (saved, then used without asking) and a no are
-# kept; a yes without a DLL asks again next start. Option: join.cmd voice on|off ('on' asks for
+# kept; a yes without a DLL asks again next start. Option: join-roe-os.cmd voice on|off ('on' asks for
 # the DLL again).
 function Get-VoiceChoice($Voice, [string]$Dll, [string]$Client, [string]$Option) {
     $asked = $false
@@ -831,7 +831,7 @@ function Get-VoiceChoice($Voice, [string]$Dll, [string]$Client, [string]$Option)
         Write-Host "Voice chat needs our $voiceFile in the game folder while the game runs (the original is put back afterwards)."
         $Voice = (Ask 'Use voice chat? (y/n)' 'y') -match '^[yY]'
         $asked = $true
-        Write-Host 'Change it later with: join.cmd voice on | off'
+        Write-Host 'Change it later with: join-roe-os.cmd voice on | off'
     }
     if (-not $Voice) { return @{ Voice = $false; Dll = $Dll; Pick = $null } }
     $pick = Select-VoiceDll $Dll $Client ($Option -eq 'on')
@@ -1250,7 +1250,7 @@ function Get-ScriptVersions([string]$Reply) {
 }
 # Throws when this script is older than the server needs; a line when a newer one exists, else $null.
 # Script: the name the lines give this script.
-function Get-VersionNotice([string]$Reply, [string]$Have = $joinVersion, [string]$Script = 'join.cmd') {
+function Get-VersionNotice([string]$Reply, [string]$Have = $joinVersion, [string]$Script = 'join-roe-os.cmd') {
     $versions = Get-ScriptVersions $Reply
     if (-not $versions) { return $null }
     if ((Compare-Version $Have $versions.min) -lt 0) {
@@ -1479,7 +1479,7 @@ function Get-AccountFolder([string]$Server) { return Join-Path $joinRoot (Get-Se
 # Notice a newer one), where else the game goes for it (ADDRESSES without ServerIps; $null: no
 # answer, or Addresses false) and who plays where (STATS: Regions). Info is $null from a server
 # without an account service, which answers none of them.
-function Connect-Server([string]$Ip, [string]$Folder, [string[]]$ServerIps, [bool]$Addresses = $true, [string]$Script = 'join.cmd') {
+function Connect-Server([string]$Ip, [string]$Folder, [string[]]$ServerIps, [bool]$Addresses = $true, [string]$Script = 'join-roe-os.cmd') {
     $result = [pscustomobject]@{ Info = $null; Name = ''; TooOld = ''; Notice = $null; Listed = $null; Regions = '' }
     $result.Info = Invoke-Account $Ip $Folder 'INFO'
     if (-not $result.Info) { return $result }
@@ -1564,11 +1564,11 @@ function Update-Firewall([string]$Client, $ServerList, [string]$Server, [string[
     Set-ServerAddresses $ServerList $Server $keep $keepIps
     return [pscustomobject]@{ Programs = $programs; Check = $check }
 }
-# Removes every rule of join.cmd and the server launcher.
+# Removes every rule of join-roe-os.cmd and the server launcher.
 function Reset-AllRules {
     $all = @(Get-NetFirewallRule -Group 'ROE2022-*' -ErrorAction SilentlyContinue)
     Assert-GameClosed @($all | ForEach-Object { ($_ | Get-NetFirewallApplicationFilter).Program } | Sort-Object -Unique)
-    Remove-Rules $all 'of join.cmd and the server launcher'
+    Remove-Rules $all 'of join-roe-os.cmd and the server launcher'
     Write-Host 'The next join creates new rules that trust only its own server.'
 }
 # Removes the rules of a game folder (and other rules that block its programs).
@@ -1682,12 +1682,12 @@ function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick, [str
 }
 
 # --- Started through Steam (launch options) ---------------------------------------------------
-# Steam's launch option "<this file>" %command% runs join.cmd with the game's own command line:
+# Steam's launch option "<this file>" %command% runs join-roe-os.cmd with the game's own command line:
 # Steam's launch entry for Ring of Elysium, "<game folder>\SLauncher.exe" -steam -maintenance.
-# join.cmd then joins without menus (the server and account of join.cmd steam-setup, else the last
+# join-roe-os.cmd then joins without menus (the server and account of join-roe-os.cmd steam-setup, else the last
 # used ones) and starts Europa_Client.exe of that folder (or its XVersion when that was the last
 # game folder) with our arguments instead of the launcher; what the player wrote after %command%
-# is passed on. join.cmd steam-setup prints the line and can write it into Steam's localconfig.vdf
+# is passed on. join-roe-os.cmd steam-setup prints the line and can write it into Steam's localconfig.vdf
 # (only while Steam is closed: Steam writes the file back when it exits).
 $steamAppId = '755790'
 $steamExes = @('SLauncher.exe', 'Europa_Client.exe')
@@ -1941,17 +1941,18 @@ function Get-SteamLaunchLine([string]$Self = $env:ROE_JOIN_SELF, [switch]$Window
     if ($Window) { return "`"$Self`" --window %command%" }
     return "`"$Self`" %command%"
 }
-function Test-OurLaunchOptions([string]$Launch) { return [bool]($Launch -and $Launch -match 'join\.(cmd|py)\b') }
-# join.cmd [-Server <address>] [-Name <name>] steam-setup [off]: the Steam profile and the launch
+# Ours: a line naming join-roe-os.cmd or join-roe-os.py, or the old join.cmd or join.py (set up before the rename).
+function Test-OurLaunchOptions([string]$Launch) { return [bool]($Launch -and $Launch -match 'join(-roe-os)?\.(cmd|py)\b') }
+# join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off]: the Steam profile and the launch
 # option line, written into Steam when the player wants (Steam closed). Steam: Get-SteamFolder's.
 function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name, [string]$Steam = (Get-SteamFolder)) {
     $line = Get-SteamLaunchLine
     if ($Off -or -not ($Server -or $Name)) {
         $Settings.PSObject.Properties.Remove('steam')
-        if (-not $Off) { Write-Host 'Started from Steam, join.cmd joins the server and account you used last (-Server and -Name fix them).' }
+        if (-not $Off) { Write-Host 'Started from Steam, join-roe-os.cmd joins the server and account you used last (-Server and -Name fix them).' }
     } else {
         $Server = Get-SteamServer $Settings $Server
-        if (-not $Server) { throw 'A server is needed: join.cmd -Server <address> steam-setup' }
+        if (-not $Server) { throw 'A server is needed: join-roe-os.cmd -Server <address> steam-setup' }
         $steamProfile = [pscustomobject]@{ server = $Server; account = '' }
         if ($Name) {
             $entry = @(Read-Accounts (Get-AccountFolder $Server) | Where-Object { $_.token -and $_.name -eq $Name })[0]
@@ -1959,7 +1960,7 @@ function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name
             $steamProfile.account = Get-AccountId $entry.token
         }
         $Settings | Add-Member -NotePropertyName steam -NotePropertyValue $steamProfile -Force
-        Write-Host ("Started from Steam, join.cmd joins $Server" + $(if ($Name) { " as $Name." } else { ' with its last used account.' }))
+        Write-Host ("Started from Steam, join-roe-os.cmd joins $Server" + $(if ($Name) { " as $Name." } else { ' with its last used account.' }))
     }
     $Settings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
     $yourself = if ($Off) { 'remove the line in Steam yourself.' } else { 'paste the line into Steam yourself.' }
@@ -1989,9 +1990,9 @@ function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name
 
 # The window started by Steam: the game in the command line after --window ($null: not by Steam).
 function Find-WindowSteamGame([string]$Text) { return Find-SteamGame (("$Text" -replace '^\s*--window(?=\s|$)', '').Trim()) }
-# What the game's launch options in Steam are for this join.cmd (Self): off (none), other (not
+# What the game's launch options in Steam are for this join-roe-os.cmd (Self): off (none), other (not
 # ours), window (ours, opens the window), console (ours, steam-setup's console form) or moved
-# (ours, but a join.cmd in another place).
+# (ours, but another copy: in another place, or the old join.cmd).
 function Get-LaunchState($Launch, [string]$Self = $env:ROE_JOIN_SELF) {
     if (-not "$Launch".Trim()) { return 'off' }
     if (-not (Test-OurLaunchOptions "$Launch")) { return 'other' }
@@ -2103,7 +2104,7 @@ function Get-GuiSteamText([string]$State, $Settings) {
     switch ($State) {
         'window' { return [pscustomobject]@{ Text = "On: Steam's Play button starts the game $(Get-SteamProfileText $Settings)."; Level = 'info' } }
         'console' { return [pscustomobject]@{ Text = 'On, with a console window instead of this one. Press Set up to get this window.'; Level = 'warn' } }
-        'moved' { return [pscustomobject]@{ Text = 'On, but for a join.cmd in another folder. Press Set up to use this one.'; Level = 'warn' } }
+        'moved' { return [pscustomobject]@{ Text = 'On, but for another copy (another folder, or the old join.cmd). Press Set up to use this one.'; Level = 'warn' } }
         'other' { return [pscustomobject]@{ Text = 'Off. Steam has other launch options for Ring of Elysium; Set up asks before it replaces them.'; Level = 'muted' } }
         'nosteam' { return [pscustomobject]@{ Text = 'Off. Steam was not found on this PC.'; Level = 'muted' } }
         'off' { return [pscustomobject]@{ Text = 'Off.'; Level = 'muted' } }
@@ -2117,7 +2118,7 @@ function Get-SteamCountdownText([int]$Seconds, [string]$Server, [string]$Account
 }
 
 # === The window ===============================================================================
-# join.cmd without arguments (a double-click) or with --window. The functions above do the work;
+# join-roe-os.cmd without arguments (a double-click) or with --window. The functions above do the work;
 # the ones below add only the window.
 
 # The code both runspaces of the window load: this file's settings, constants and functions
@@ -2308,8 +2309,8 @@ function Get-GuiFirewallText([string[]]$Problems, [string]$Note, $Blocking, [boo
     if (@($Blocking | Where-Object { $_ -and -not $_.Local }).Count) {
         $lines += 'Remove or turn off the rules of the policy or security product where they come from (or ask who manages this PC).'
     }
-    if ($Admin) { $lines += 'join.cmd already runs as administrator: the details show the error.' }
-    else { $lines += 'Right-click join.cmd > Run as administrator (on a standard Windows account this needs an administrator''s password).' }
+    if ($Admin) { $lines += 'join-roe-os.cmd already runs as administrator: the details show the error.' }
+    else { $lines += 'Right-click join-roe-os.cmd > Run as administrator (on a standard Windows account this needs an administrator''s password).' }
     $lines += 'Or turn the firewall rules off under Advanced (then the game can reach the internet).'
     return $lines
 }
@@ -2420,7 +2421,7 @@ function Get-GuiXaml {
           <TextBox x:Name="SteamLineBox" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center"/>
         </DockPanel>
         <TextBlock Margin="0,10,0,0" FontWeight="Bold" Text="Automatic"/>
-        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="Set up puts the line into Steam for you, with the server and account selected above. Steam has to be closed for this: join.cmd asks, closes it and can start it again."/>
+        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="Set up puts the line into Steam for you, with the server and account selected above. Steam has to be closed for this: join-roe-os.cmd asks, closes it and can start it again."/>
         <TextBlock x:Name="SteamText" Margin="0,4,0,0" TextWrapping="Wrap"/>
         <WrapPanel Margin="0,6,0,0">
           <Button x:Name="SteamSetButton" Margin="0,0,6,6" Content="Set up Start through Steam"/>
@@ -2442,7 +2443,7 @@ function Get-GuiXaml {
           <Button x:Name="FirewallResetButton" Margin="0,0,6,6" Content="Reset all rules"/>
           <Button x:Name="FirewallShowButton" Margin="0,0,6,6" Content="Show the rules"/>
         </WrapPanel>
-        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="Account backup: one file with the keys of every account, to play with them on another PC (join.cmd and join.py read it too). Keep it private."/>
+        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="Account backup: one file with the keys of every account, to play with them on another PC (join-roe-os.cmd and join-roe-os.py read it too). Keep it private."/>
         <WrapPanel Margin="0,6,0,0">
           <Button x:Name="ExportButton" Margin="0,0,6,6" Content="Export accounts..."/>
           <Button x:Name="ImportButton" Margin="0,0,6,6" Content="Import accounts..."/>
@@ -2546,7 +2547,7 @@ function Show-InputDialog([string]$Prompt, [string]$Context, [string]$Default) {
     if (-not $dialog.ShowDialog()) { return $null }
     return $box.Text
 }
-# A question of the worker (join.cmd's Ask): yes/no ones as a message box, others with a text field.
+# A question of the worker (join-roe-os.cmd's Ask): yes/no ones as a message box, others with a text field.
 function Show-Question($Request) {
     try {
         $context = (@($gui.Recent) | Select-Object -Last 8) -join "`n"
@@ -2592,7 +2593,7 @@ function Receive-GuiEvents {
         $gui.Draining = $false
     }
 }
-# The worker: a runspace with join.cmd and this file's functions, for one piece of work at a time.
+# The worker: a runspace with join-roe-os.cmd and this file's functions, for one piece of work at a time.
 function New-Worker([string]$Code) {
     $runspace = [runspacefactory]::CreateRunspace()
     $runspace.ApartmentState = 'MTA'
@@ -2602,7 +2603,7 @@ function New-Worker([string]$Code) {
     $worker = [powershell]::Create()
     $worker.Runspace = $runspace
     [void]$worker.AddScript($Code).Invoke()
-    if ($worker.Streams.Error.Count) { throw "The background part could not load join.cmd: $($worker.Streams.Error[0])" }
+    if ($worker.Streams.Error.Count) { throw "The background part could not load join-roe-os.cmd: $($worker.Streams.Error[0])" }
     $worker.Commands.Clear()
     return $worker
 }
@@ -2776,7 +2777,7 @@ function Update-GameFolder {
     }
 }
 # Checks the game build of the chosen folder in the background and saves it (roe-join.json
-# "client": the full folder, as join.cmd keeps it).
+# "client": the full folder, as join-roe-os.cmd keeps it).
 function Save-GuiGameFolder {
     if (-not $gui.Client) { Add-Line (Get-GameFolderChoice $gui.GameBase ([bool]$gui.Dx12)).Problem 'error'; return }
     $folder = $gui.Client
@@ -2805,7 +2806,7 @@ function Update-Voice {
     $dll = Get-GuiVoiceDll
     $problem = Get-VoiceDllProblem $dll $(if (Test-Client $gui.Client) { $gui.Client } else { '' })
     if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) {
-        Set-Text $gui.C.VoiceNote ("Our $voiceFile is not next to join.cmd or in its voice folder. Choose the folder that has it (the voice folder of the server package), " +
+        Set-Text $gui.C.VoiceNote ("Our $voiceFile is not next to join-roe-os.cmd or in its voice folder. Choose the folder that has it (the voice folder of the server package), " +
             "or download it from $voiceDownload.") 'warn'
     } elseif ($problem) {
         Set-Text $gui.C.VoiceNote "Voice chat: $problem. Choose the folder with ours." 'warn'
@@ -2873,7 +2874,7 @@ function Start-Play {
         return
     }
     if ($null -eq (Read-Settings).firewall) {
-        $answer = Show-Message ('join.cmd can add Windows Firewall rules so the game reaches only the servers you join (it also tries the ' +
+        $answer = Show-Message ('join-roe-os.cmd can add Windows Firewall rules so the game reaches only the servers you join (it also tries the ' +
             "publisher's old servers). That needs administrator approval (a Windows prompt) when the allowed addresses change.`n`n" +
             'Add the firewall rules? (Change it later under Advanced.)') 'YesNo' 'Question' 'Yes'
         Update-Settings @{ firewall = $answer -eq 'Yes' }
@@ -2958,7 +2959,7 @@ function Set-GuiSteam([bool]$Off) {
     if (Test-SteamRunning) {
         $what = if ($Off) { 'turn Start through Steam off' } else { 'set up Start through Steam' }
         $answer = Show-Message ("Steam has to be closed to $what (it saves its own settings when it closes and would undo the change).`n`n" +
-            'Close Steam now? join.cmd can start it again afterwards.') 'YesNo' 'Question' 'Yes'
+            'Close Steam now? join-roe-os.cmd can start it again afterwards.') 'YesNo' 'Question' 'Yes'
         if ($answer -ne 'Yes') { Add-Line 'Start through Steam: nothing changed (Steam stays open).' 'warn'; return }
         $close = $true
     }
@@ -3054,11 +3055,11 @@ function Set-GuiFirewall([string]$Action) {
             Update-Settings @{ firewall = $false }
             Start-Work 'Remove-FolderRules' @{ Client = $client } {
                 param($done)
-                if ($done.Ok) { Add-Line 'Firewall rules off: join.cmd no longer sets them (the game can reach the internet).' } else { Add-Line $done.Message 'error' }
+                if ($done.Ok) { Add-Line 'Firewall rules off: join-roe-os.cmd no longer sets them (the game can reach the internet).' } else { Add-Line $done.Message 'error' }
             }
         }
         'reset' {
-            if ((Show-Message "Remove the firewall rules of every game folder (join.cmd's and the server launcher's)? The next Play allows only its own server." 'YesNo' 'Question' 'No') -ne 'Yes') { return }
+            if ((Show-Message "Remove the firewall rules of every game folder (join-roe-os.cmd's and the server launcher's)? The next Play allows only its own server." 'YesNo' 'Question' 'No') -ne 'Yes') { return }
             Start-Work 'Reset-AllRules' @{} $null
         }
         'show' {
@@ -3074,7 +3075,7 @@ function Export-GuiAccounts {
     $dialog.Filter = 'Account backup (*.json)|*.json|All files (*.*)|*.*'
     if ($dialog.ShowDialog($gui.Window) -ne $true) { return }
     $done = Export-Accounts $joinRoot (Read-Settings) $dialog.FileName
-    Add-Line "Saved $($done.Accounts) accounts of $($done.Servers) servers in $($dialog.FileName). On the other PC: Import accounts... (or join.cmd import <file>)."
+    Add-Line "Saved $($done.Accounts) accounts of $($done.Servers) servers in $($dialog.FileName). On the other PC: Import accounts... (or join-roe-os.cmd import <file>)."
     Add-Line $backupWarning 'warn'
 }
 function Import-GuiAccounts {
@@ -3109,7 +3110,7 @@ function Register-SteamHandlers {
     Add-Handler $gui.C.SteamOffButton 'Click' { Set-GuiSteam $true }
     Add-Handler $gui.C.SteamAutoBox 'Click' { if (-not $gui.Updating) { Set-SteamProfile @{ auto_start = [bool]$gui.C.SteamAutoBox.IsChecked } } }
 }
-# The console the window was started from out of sight: cmd.exe's when Steam starts join.cmd and
+# The console the window was started from out of sight: cmd.exe's when Steam starts join-roe-os.cmd and
 # it waits for the window, PowerShell's own after a double-click. A classic console window is
 # hidden. Windows Terminal (the default terminal on Windows 11) only minimizes for that, so there
 # its window is hidden when it holds just this tab; it closes when the tab ends.
@@ -3141,13 +3142,13 @@ function Hide-ConsoleWindow {
         }
         [void][RoeJoin.ConsoleWindow]::ShowWindow($window, 0)  # SW_HIDE
     } catch {
-        Write-GuiLog "join.cmd could not hide its console window: $($_.Exception.Message)"
+        Write-GuiLog "join-roe-os.cmd could not hide its console window: $($_.Exception.Message)"
     }
 }
 function Start-Gui([string]$Code) {
     $log = Get-GuiLogPath
     if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination ($log -replace '\.log$', '.old.log') -Force }
-    Write-GuiLog "join.cmd $joinVersion opens its window ($env:ROE_JOIN_SELF)."
+    Write-GuiLog "join-roe-os.cmd $joinVersion opens its window ($env:ROE_JOIN_SELF)."
     $window = [Windows.Markup.XamlReader]::Parse((Get-GuiXaml))
     $gui.Window = $window
     $gui.C = @{}
@@ -3158,7 +3159,7 @@ function Start-Gui([string]$Code) {
     $gui.SideJob = $null; $gui.SideWorker = $null; $gui.Code = $Code
     $gui.Roles = $null; $gui.RolesServer = ''
     $gui.SteamState = ''; $gui.SteamBusy = $false; $gui.SteamClosed = $false; $gui.SteamOff = $false; $gui.CountdownTimer = $null
-    # Started by Steam (launch option "<join.cmd>" --window %command%): its command line follows --window.
+    # Started by Steam (launch option "<join-roe-os.cmd>" --window %command%): its command line follows --window.
     $gui.SteamGame = Find-WindowSteamGame "$env:ROE_JOIN_ARGS"
 
     $gui.Worker = New-Worker $Code
@@ -3204,8 +3205,8 @@ function Start-Gui([string]$Code) {
     $window.Add_Closing({
         param($sender, $e)
         if (-not $gui.Playing) { return }
-        $answer = Show-Message ("join.cmd is still joining or waits for the game to exit, to put the game's original $voiceFile back. " +
-            'Close it anyway? Then the next start of join.cmd puts it back.') 'YesNo' 'Warning' 'No'
+        $answer = Show-Message ("join-roe-os.cmd is still joining or waits for the game to exit, to put the game's original $voiceFile back. " +
+            'Close it anyway? Then the next start of join-roe-os.cmd puts it back.') 'YesNo' 'Warning' 'No'
         if ($answer -ne 'Yes') { $e.Cancel = $true }
     })
     $timer = New-Object Windows.Threading.DispatcherTimer
@@ -3218,7 +3219,7 @@ function Start-Gui([string]$Code) {
     Request-SteamState
     [void]$window.ShowDialog()
     $timer.Stop()
-    Write-GuiLog 'join.cmd closed its window.'
+    Write-GuiLog 'join-roe-os.cmd closed its window.'
 }
 
 # === Main part ================================================================================
@@ -3231,7 +3232,7 @@ if ($env:ROE_JOIN_WINDOW) {
     try {
         Hide-ConsoleWindow
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
-        if (-not $env:ROE_JOIN_SELF) { throw 'Start join.cmd by double-clicking it.' }
+        if (-not $env:ROE_JOIN_SELF) { throw 'Start join-roe-os.cmd by double-clicking it.' }
         $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]' })
         $gui = @{}
         $joinCode = Get-JoinCode $env:ROE_JOIN_SELF
@@ -3241,8 +3242,8 @@ if ($env:ROE_JOIN_WINDOW) {
         Start-Gui $joinCode
     } catch {
         $message = Get-ErrorMessage $_
-        Write-GuiLog "join.cmd could not start its window: $message`r`n$($_ | Out-String)$($_.ScriptStackTrace)"
-        try { [void][Windows.MessageBox]::Show("join.cmd could not start its window: $message`n`nDetails: $(Get-GuiLogPath)", 'Ring of Elysium 2022', 'OK', 'Error') } catch { }
+        Write-GuiLog "join-roe-os.cmd could not start its window: $message`r`n$($_ | Out-String)$($_.ScriptStackTrace)"
+        try { [void][Windows.MessageBox]::Show("join-roe-os.cmd could not start its window: $message`n`nDetails: $(Get-GuiLogPath)", 'Ring of Elysium 2022', 'OK', 'Error') } catch { }
     }
     [Environment]::Exit(0)
 }
@@ -3256,14 +3257,14 @@ try {
     # --skip-file-check: no check of the game files (for players who changed them on purpose).
     $skipFileCheck = $argText -match '(^|\s)--skip-file-check(?=\s|$)'
     $argText = ($argText -replace '(^|\s)--skip-file-check(?=\s|$)', ' ').Trim()
-    # Started by Steam ("<join.cmd>" %command%): the command line names the game's exe; our options
+    # Started by Steam ("<join-roe-os.cmd>" %command%): the command line names the game's exe; our options
     # are the ones in front of it.
     $steamGame = Find-SteamGame $argText
     if ($steamGame) { $argText = $steamGame.Before.Trim() }
-    $usage = ('Usage: join.cmd [--console] [--skip-file-check] [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" +
-        'For GM accounts: join.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)' + "`n" +
-        'Start through Steam: join.cmd [-Server <address>] [-Name <name>] steam-setup [off] (the launch option line, set in Steam if you want)' + "`n" +
-        'The window: join.cmd without arguments, or join.cmd --window')
+    $usage = ('Usage: join-roe-os.cmd [--console] [--skip-file-check] [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" +
+        'For GM accounts: join-roe-os.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)' + "`n" +
+        'Start through Steam: join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off] (the launch option line, set in Steam if you want)' + "`n" +
+        'The window: join-roe-os.cmd without arguments, or join-roe-os.cmd --window')
     $arguments = Read-Arguments $argText
     # Ours left by a crash or a closed window: the original back first. Not for "admin", which
     # runs next to a game this script started (its join puts the DLL back when the game exits).
@@ -3296,7 +3297,7 @@ try {
         $state = if ($null -eq $settings.voice) { 'not asked yet' } elseif ($settings.voice) { 'on' } else { 'off' }
         $dll = if ($settings.voice_dll -and (Test-Path -LiteralPath $settings.voice_dll -PathType Leaf)) { $settings.voice_dll } else { Get-DefaultVoiceDll }
         $found = if (Test-Path -LiteralPath $dll -PathType Leaf) { 'found' } else { 'missing (it comes with the server package)' }
-        Write-Host "Voice chat: $state. Our ${voiceFile}: $dll ($found). Commands: join.cmd voice on | off (on also asks for the DLL)"
+        Write-Host "Voice chat: $state. Our ${voiceFile}: $dll ($found). Commands: join-roe-os.cmd voice on | off (on also asks for the DLL)"
         exit 0
     }
     if ($command -match '^(export|import)(\s+(.*))?$') {
@@ -3309,10 +3310,10 @@ try {
             $done = Export-Accounts $joinRoot $settings $file
             Write-Host "Saved $($done.Accounts) accounts of $($done.Servers) servers in $file."
             Write-Host $backupWarning -ForegroundColor Yellow
-            Write-Host 'On the other computer: join.cmd import <file> (or python3 join.py --import <file>).'
+            Write-Host 'On the other computer: join-roe-os.cmd import <file> (or python3 join-roe-os.py --import <file>).'
             exit 0
         }
-        if (-not $file) { throw 'Usage: join.cmd import FILE' }
+        if (-not $file) { throw 'Usage: join-roe-os.cmd import FILE' }
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "No file: $file" }
         Write-Host $backupWarning -ForegroundColor Yellow
         $done = Import-Accounts $joinRoot $settings $file
@@ -3353,7 +3354,7 @@ try {
         $settings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
         if ($action -eq 'on') { Write-Host 'Firewall rules on: the next join creates them.'; exit 0 }
         Remove-FolderRules $client
-        Write-Host 'Firewall rules off: join.cmd no longer creates them (the game can reach the internet).'
+        Write-Host 'Firewall rules off: join-roe-os.cmd no longer creates them (the game can reach the internet).'
         exit 0
     }
     Write-Host ('Ring of Elysium 2022: join a server' + $(if ($steamGame) { ' (started by Steam)' } else { '' }))
@@ -3409,11 +3410,11 @@ try {
     # 3. Firewall (optional, asked once).
     if ($null -eq $firewall) {
         Write-Host ''
-        Write-Host 'join.cmd can add Windows Firewall rules so the game reaches only the servers you join'
+        Write-Host 'join-roe-os.cmd can add Windows Firewall rules so the game reaches only the servers you join'
         Write-Host '(it also tries the publisher''s old servers). That needs administrator approval when the allowed addresses change.'
         $firewall = (Ask 'Add the firewall rules? (y/n)' 'y') -match '^[yY]'
         Save-Settings
-        Write-Host 'Change it later with: join.cmd firewall on | off | reset'
+        Write-Host 'Change it later with: join-roe-os.cmd firewall on | off | reset'
     }
     $rules = Update-Firewall $client $serverList $server $serverIps $contact.Listed $firewall
     if ($rules.Check) { Confirm-FirewallState $client $rules.Programs $rules.Check.Wanted $rules.Check.RulesOn $rules.Check.Step }
@@ -3424,7 +3425,7 @@ try {
     if ($accountList.Count -and -not $givenName -and (Update-AccountNames $serverIp $folder $accountList)) { Save-Accounts $folder $accountList | Out-Null }
     if ($steamGame -and -not $givenName) {
         $steamPick = Get-SteamAccount $settings $server $accountList
-        if (-not $steamPick.Found) { Write-Host 'The account join.cmd steam-setup saved for Steam starts is no longer there. Choose one:' }
+        if (-not $steamPick.Found) { Write-Host 'The account join-roe-os.cmd steam-setup saved for Steam starts is no longer there. Choose one:' }
         $entry = if ($steamPick.Found) { $steamPick.Entry } else { Select-Account $accountList '' }
     } else {
         $entry = Select-Account $accountList $givenName

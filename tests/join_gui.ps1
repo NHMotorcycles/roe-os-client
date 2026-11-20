@@ -1,4 +1,4 @@
-# join.cmd's window without a window on screen: it loads join.cmd (Source, copied to a .ps1) the
+# join-roe-os.cmd's window without a window on screen: it loads join-roe-os.cmd (Source, copied to a .ps1) the
 # way the window does at its start, its windows parse, the worker runspace takes work and asks questions
 # through the event queue, and its server and play steps work against a fake account service.
 # Prints OK or FAIL lines.
@@ -23,7 +23,7 @@ function Next-Event([int]$Seconds = 20) {
     return $null
 }
 
-# join.cmd without its main part (the console's and the window's), Write-Host and Ask replaced.
+# join-roe-os.cmd without its main part (the console's and the window's), Write-Host and Ask replaced.
 $damaged = Join-Path $Base 'damaged.ps1'
 Set-Content -LiteralPath $damaged -Value 'function Broken {'
 $stop = ''
@@ -33,11 +33,11 @@ $code = Get-JoinCode $Source
 Check 'join code' ($code -match 'function Invoke-Login' -and $code -match '\$expectedSha = ' -and $code -match 'function Start-Gui' -and $code -notmatch 'Ring of Elysium 2022: join a server''' -and
     $code -notmatch 'Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms' -and $code -notmatch 'ROE_JOIN_WINDOW' -and
     $code.IndexOf('function Ask(') -ge 0 -and $code.LastIndexOf('function Ask {') -gt $code.IndexOf('function Ask(') -and $code.LastIndexOf('function Write-Host {') -gt 0)
-$env:ROE_JOIN_SELF = Join-Path $Base 'join.cmd'
+$env:ROE_JOIN_SELF = Join-Path $Base 'join-roe-os.cmd'
 . ([ScriptBlock]::Create($code))
 Check 'loaded' ($joinVersion -and (Get-Command Connect-Server -CommandType Function) -and (Get-Command Write-Host).CommandType -eq 'Function')
 
-# join.cmd's messages become events.
+# join-roe-os.cmd's messages become events.
 Write-Host 'Voice chat: on.'
 Write-Host 'It failed.' -ForegroundColor Yellow
 Write-Host ''
@@ -195,17 +195,17 @@ $worker.Runspace.Dispose()
 $worker.Dispose()
 
 # The firewall text and the server line.
-$text = (Get-GuiFirewallText @('no join.cmd rule for 2 of 2 game programs') (Get-ElevationNote ([pscustomobject]@{ Ok = $false; Reason = 'declined'; Detail = '' })) @() $false) -join "`n"
-Check 'firewall text' ($text -like 'The firewall rules could not be set. The administrator prompt was declined*' -and $text -match 'Right-click join\.cmd > Run as administrator' -and
-    $text -match 'off under Advanced' -and $text -match '- no join\.cmd rule')
+$text = (Get-GuiFirewallText @('no join-roe-os.cmd rule for 2 of 2 game programs') (Get-ElevationNote ([pscustomobject]@{ Ok = $false; Reason = 'declined'; Detail = '' })) @() $false) -join "`n"
+Check 'firewall text' ($text -like 'The firewall rules could not be set. The administrator prompt was declined*' -and $text -match 'Right-click join-roe-os\.cmd > Run as administrator' -and
+    $text -match 'off under Advanced' -and $text -match '- no join-roe-os\.cmd rule')
 $text = (Get-GuiFirewallText @(1..7 | ForEach-Object { "problem $_" }) '' @([pscustomobject]@{ Local = $false }) $true) -join "`n"
 Check 'firewall text: policy, admin' ($text -like 'The firewall rules are not as they should be*' -and $text -match 'and 2 more' -and $text -match 'policy or security product' -and $text -notmatch 'Right-click')
 $line = Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=2'; TooOld = ''; Notice = $null; Regions = 'EU (normal): 2 online, 0 searching, 0 matches | AS (duel): 0 online, 0 searching, 0 matches' })
 Check 'server line' ($line.Level -eq 'info' -and $line.Text -eq "EU (normal): 2 online, 0 searching, 0 matches`nAS (duel): 0 online, 0 searching, 0 matches")
-$line = Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=2 matches=1 waiting=0'; TooOld = ''; Notice = 'A newer join.cmd'; Regions = '' })
-Check 'server line: older server' ($line.Level -eq 'warn' -and $line.Text -like "A newer join.cmd`nOn the server now: 2 players online, 1 match running*")
+$line = Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=2 matches=1 waiting=0'; TooOld = ''; Notice = 'A newer join-roe-os.cmd'; Regions = '' })
+Check 'server line: older server' ($line.Level -eq 'warn' -and $line.Text -like "A newer join-roe-os.cmd`nOn the server now: 2 players online, 1 match running*")
 Check 'server line: no service, too old' ((Get-ServerInfoText ([pscustomobject]@{ Info = $null })).Text -like 'No answer from the account service*' -and
-    (Get-ServerInfoText ([pscustomobject]@{ Info = 'OK'; TooOld = 'This join.cmd is version 0.9' })).Level -eq 'error')
+    (Get-ServerInfoText ([pscustomobject]@{ Info = 'OK'; TooOld = 'This join-roe-os.cmd is version 0.9' })).Level -eq 'error')
 
 # Settings: changed values, the others kept.
 $settingsPath = Join-Path $Base 'roe-join.json'
@@ -280,7 +280,7 @@ Check 'play: account gone' ($stop -like 'The account Gone is no longer saved for
 $global:Replies['VERSION'] = 'OK min=9 current=9'
 $stop = ''
 try { Invoke-PlayJob (Join-Path $Base 'game') '127.0.0.5' $t2 'Ben' $false $false | Out-Null } catch { $stop = $_.Exception.Message }
-Check 'play: too old' ($stop -like 'This join.cmd is version*Download the new join.cmd*')
+Check 'play: too old' ($stop -like 'This join-roe-os.cmd is version*Download the new join-roe-os.cmd*')
 $global:Replies['VERSION'] = 'OK min=0 current=0'
 $extraFree = $global:Started[4]
 Invoke-PlayJob (Join-Path $Base 'game') '127.0.0.5' $t2 'Ben' $false $false @('-windowed', '-x') | Out-Null

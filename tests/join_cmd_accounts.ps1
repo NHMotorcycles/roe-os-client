@@ -1,5 +1,5 @@
-# join.cmd's account functions (menu, accounts.json, login) in the folder Base with a
-# fake account service: parses Source (join.cmd copied to a .ps1), loads its top-level functions
+# join-roe-os.cmd's account functions (menu, accounts.json, login) in the folder Base with a
+# fake account service: parses Source (join-roe-os.cmd copied to a .ps1), loads its top-level functions
 # and prints OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
@@ -154,7 +154,7 @@ Serve @{ 'NEW' = $null }
 Answer @('Erik')
 $r = Connect-Account '1.2.3.4' $off (Read-Accounts $off) $null ''
 Check 'login step without a service' ($r.Uid -eq '1' -and -not $r.Accounts -and $r.Name -eq 'Erik' -and $global:Lobby -eq 'Erik')
-# The admin page (join.cmd admin): the role, then the one-time link, its address from the server
+# The admin page (join-roe-os.cmd admin): the role, then the one-time link, its address from the server
 # or https://admin.<domain>; non-GM accounts and servers without a page get a reason.
 $tk = 'f' * 64
 Check 'roles' ((Get-AccountRole 'OK gm') -eq 'gm' -and (Get-AccountRole 'OK player') -eq 'player' -and (Get-AccountRole 'INVALID') -eq '' -and

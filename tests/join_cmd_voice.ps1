@@ -1,5 +1,5 @@
-# join.cmd's voice DLL functions against the fake folders test_join.py made in Base: parses
-# Source (join.cmd copied to a .ps1), loads its top-level functions and prints OK or FAIL lines.
+# join-roe-os.cmd's voice DLL functions against the fake folders test_join.py made in Base: parses
+# Source (join-roe-os.cmd copied to a .ps1), loads its top-level functions and prints OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
 $tokens = $null
@@ -117,7 +117,7 @@ Check 'missing, restored at start' ((Restore-Voice $game) -and (Get-Sha256 (Join
 Remove-Item -LiteralPath (Join-Path $game $voiceFile)
 Check 'missing, ours put in' ((Install-Voice $game $ours $oursHash) -and (Get-Sha256 (Join-Path $game $voiceFile)) -eq $oursHash)
 Check 'missing, original back on exit' ((Restore-Voice $game) -and (Get-Sha256 (Join-Path $game $voiceFile)) -eq $before)
-# The DLL right next to join.cmd (no voice folder): found without a path question.
+# The DLL right next to join-roe-os.cmd (no voice folder): found without a path question.
 $beside = Join-Path $Base 'beside'
 New-Item -ItemType Directory -Force -Path $beside | Out-Null
 Copy-Item -LiteralPath $ours -Destination (Join-Path $beside $voiceFile)

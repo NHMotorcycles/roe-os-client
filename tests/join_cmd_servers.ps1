@@ -1,5 +1,5 @@
-# join.cmd's server functions (menu, the servers list, -Server) in the
-# folder Base: parses Source (join.cmd copied to a .ps1), loads its top-level functions and prints
+# join-roe-os.cmd's server functions (menu, the servers list, -Server) in the
+# folder Base: parses Source (join-roe-os.cmd copied to a .ps1), loads its top-level functions and prints
 # OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
@@ -100,10 +100,10 @@ Check 'script version' ((ConvertTo-VersionKey $joinVersion) -and (Compare-Versio
 Check 'no OK no check' ($null -eq (Get-VersionNotice 'INVALID' '0.9') -and $null -eq (Get-VersionNotice '' '0.9') -and $null -eq (Get-VersionNotice 'LIMIT' '0.9'))
 Check 'current' ($null -eq (Get-VersionNotice "OK min=0 current=0.9 $github" '0.9') -and $null -eq (Get-VersionNotice "OK min=0.9 current=0.9.0 $github later=x" '0.9') -and
     $null -eq (Get-VersionNotice "OK min=bad current=x $github" '0.9'))
-Check 'newer exists' ((Get-VersionNotice "OK min=0.9 current=0.10 $github" '0.9') -ceq 'A newer join.cmd (version 0.10) is at https://github.com/mschnati/roe-os-client; this one (version 0.9) still works.')
+Check 'newer exists' ((Get-VersionNotice "OK min=0.9 current=0.10 $github" '0.9') -ceq 'A newer join-roe-os.cmd (version 0.10) is at https://github.com/mschnati/roe-os-client; this one (version 0.9) still works.')
 $stop = ''
 try { Get-VersionNotice 'OK min=1.0 current=1.0 url=https%3A%2F%2Fexample.org%2Froe' '0.9' | Out-Null } catch { $stop = $_.Exception.Message }
-Check 'too old stops' ($stop -ceq 'This join.cmd is version 0.9; the server needs version 1.0 or newer. Download the new join.cmd from https://example.org/roe and start it again.')
+Check 'too old stops' ($stop -ceq 'This join-roe-os.cmd is version 0.9; the server needs version 1.0 or newer. Download the new join-roe-os.cmd from https://example.org/roe and start it again.')
 $stop = ''
 try { Get-VersionNotice 'OK min=1 current=1 url=javascript%3Ax%0A' '0.9' | Out-Null } catch { $stop = $_.Exception.Message }
 Check 'bad url replaced' ($stop -like '*from https://github.com/mschnati/roe-os-client and*')
@@ -144,7 +144,7 @@ Check 'contact without addresses' ($null -eq $c.Listed -and $global:Sent -notcon
 $global:Replies['VERSION'] = 'OK min=9.0 current=9.0 url=https%3A%2F%2Fexample.org%2Froe'
 $global:Sent.Clear()
 $c = Connect-Server '203.0.113.5' $root @('203.0.113.5') $true
-Check 'too old' ($c.TooOld -like 'This join.cmd is version *Download the new join.cmd from https://example.org/roe*' -and $global:Sent -notcontains 'ADDRESSES')
+Check 'too old' ($c.TooOld -like 'This join-roe-os.cmd is version *Download the new join-roe-os.cmd from https://example.org/roe*' -and $global:Sent -notcontains 'ADDRESSES')
 $global:Replies = @{}
 $c = Connect-Server '203.0.113.5' $root @('203.0.113.5')
 Check 'no account service' ($null -eq $c.Info -and $null -eq $c.Listed -and -not $c.Regions -and -not $c.Name)

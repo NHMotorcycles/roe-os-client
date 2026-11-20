@@ -1,11 +1,19 @@
 # Changelog
 
 Newest first. Each entry says what changed for someone playing. The version is the join
-scripts' (`$joinVersion` in join.cmd, `JOIN_VERSION` in join.py); a server can ask for a newer
+scripts' (`$joinVersion` in join-roe-os.cmd, `JOIN_VERSION` in join-roe-os.py); a server can ask for a newer
 one (`roe_server set join-min-version`). The server's own changes are in its repository's
 CHANGELOG.md.
 
 ## Unreleased
+
+- The join scripts are renamed: **join-roe-os.cmd** (was join.cmd) and **join-roe-os.py** (was
+  join.py). Old copies keep working against the server, with the same saved accounts, keys,
+  settings and Steam profile (`%APPDATA%\roe-join`, `~/.config/roe-join`). Start through Steam
+  set up with the old name still counts as ours: the window shows it as set up for another copy,
+  and **Set up** (or `steam-setup`) replaces the line with one for the new file. After
+  downloading join-roe-os.cmd (and setting up Steam again, if you use it) you can delete
+  join.cmd.
 
 - join.cmd starts PowerShell in a plainer way, so that virus scanners take it less often for
   malware: it runs a `.ps1` copy of itself (`%APPDATA%\roe-join\run-*.ps1`, removed again

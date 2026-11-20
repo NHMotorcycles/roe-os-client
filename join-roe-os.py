@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Join a Ring of Elysium 2022 server (roe_server) as a player, on Linux through Steam's Proton.
 #
-# The Linux counterpart of join.cmd: run it (python3 join.py). It asks for
+# The Linux counterpart of join-roe-os.cmd: run it (python3 join-roe-os.py). It asks for
 #   - the game folder (the last one is the default),
 #   - the server (arrow keys and Enter; the servers joined before by name and address, the most
 #     recently used on top, on the first start roe-os.de; the last entry asks for another address),
@@ -12,11 +12,11 @@
 # --name answer the questions up front (--name picks the saved account of that name, or claims the
 # name for a new one).
 #
-# Accounts work as with join.cmd: a new account gets a secret key from the server, kept in
+# Accounts work as with join-roe-os.cmd: a new account gets a secret key from the server, kept in
 # ~/.config/roe-join/<server>/accounts.json with the account's current name (the same file as
 # %APPDATA%\roe-join on Windows: copy the folder to play with the same accounts on another
 # computer). With first-login on, the server names a new account (newaccount and 4 digits) and
-# the game asks for the real name; otherwise join.py asks for it. The server's certificate is
+# the game asks for the real name; otherwise join-roe-os.py asks for it. The server's certificate is
 # remembered on first contact (server.pin) and a different one is refused.
 #
 # Proton, the first that exists of:
@@ -38,25 +38,25 @@
 # ~/.config/roe-join/voice-backup/ and put back when the game exits, or at the next start after a
 # crash.
 #
-# Unlike join.cmd there is no firewall step: the game can reach the internet. The addresses the
+# Unlike join-roe-os.cmd there is no firewall step: the game can reach the internet. The addresses the
 # server names for the game besides its own (ADDRESSES: other machines with its matches) are only
 # shown. The server can name the oldest version of this script it takes (VERSION); an older one
 # stops before the game starts and says where to get the new one.
 #
 # Account backup: --export [FILE] writes every server's accounts (their keys), certificate pin and
 # name into one file (default roe-join-accounts.json here); --import FILE merges one into this
-# computer. join.cmd reads and writes the same file (join.cmd export, join.cmd import).
+# computer. join-roe-os.cmd reads and writes the same file (join-roe-os.cmd export, join-roe-os.cmd import).
 #
-# Steam: with the launch option `python3 "/path/join.py" --steam %command%` Steam's Play button starts
-# join.py with Steam's own command (its runtime and Proton); join.py joins the server and account of
+# Steam: with the launch option `python3 "/path/join-roe-os.py" --steam %command%` Steam's Play button starts
+# join-roe-os.py with Steam's own command (its runtime and Proton); join-roe-os.py joins the server and account of
 # --steam-setup (else the last used ones) and runs that command with the game and our arguments.
 # --steam-setup [off] (with --server, --name) prints the line and sets (or removes) it in Steam while
 # Steam is closed.
 #
 # GM accounts: --admin (with --server and --name as for a join) opens the server's admin page in the
-# browser with a one-time login link, as join.cmd admin.
+# browser with a one-time login link, as join-roe-os.cmd admin.
 #
-# Game files: before a join, join.py checks the files other launchers and lobby patchers change (the
+# Game files: before a join, join-roe-os.py checks the files other launchers and lobby patchers change (the
 # .sfc archives they append to, the lobby caches, GCloudVoice.dll) against the Steam install and looks
 # for files a clean install does not have (proxy DLLs such as dinput8.dll, data_exp.vfs). When one
 # differs it says which and how to repair it (Steam's Verify integrity of game files) and asks whether
@@ -86,7 +86,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-# This script's version; the server can ask for a newer one (VERSION). The same number as join.cmd's
+# This script's version; the server can ask for a newer one (VERSION). The same number as join-roe-os.cmd's
 # and roe_server's (src/lobby/accounts.hpp kJoinScriptVersion).
 JOIN_VERSION = '1.0'
 JOIN_URL = 'https://github.com/mschnati/roe-os-client'
@@ -368,7 +368,7 @@ def start_game(client, arguments, options, watch=None):
         subprocess.call([str(plan['tool'].proton), 'run', 'wineboot', '-u'], cwd=client, env=env)
         if not prefix_ready(plan['prefix']):
             raise Failure(f'Proton could not set up the prefix {plan["prefix"]}. Start Ring of Elysium once from Steam '
-                          '(it sets up the prefix; quit at the login screen), then run join.py again.')
+                          '(it sets up the prefix; quit at the login screen), then run join-roe-os.py again.')
     return wait_game(subprocess.Popen(plan['command'], cwd=client, env=env), watch)
 
 
@@ -379,7 +379,7 @@ SCRIPT_FOLDER = Path(_HERE)
 
 
 def default_voice_dll():
-    """Where our DLL is looked for without asking: next to join.py, then in its voice folder."""
+    """Where our DLL is looked for without asking: next to join-roe-os.py, then in its voice folder."""
     for folder in (SCRIPT_FOLDER, VOICE_SOURCE):
         if (folder / VOICE_FILE).is_file():
             return folder / VOICE_FILE
@@ -400,8 +400,8 @@ VOICE_BACKUP = 'roe-join-backup'   # in the game folder: the original DLL
 
 
 def voice_readme(client):
-    text = (f"The game's original {VOICE_FILE}, saved by join.py before it put in the one for voice chat.\n"
-            f"join.py puts it back when the game exits. To do it by hand: copy {VOICE_FILE} from this folder into\n"
+    text = (f"The game's original {VOICE_FILE}, saved by join-roe-os.py before it put in the one for voice chat.\n"
+            f"join-roe-os.py puts it back when the game exits. To do it by hand: copy {VOICE_FILE} from this folder into\n"
             f"{client}\n(replace the file there). Or in Steam: Ring of Elysium > Properties > Installed Files > "
             "Verify integrity of game files.\n")
     try:
@@ -483,7 +483,7 @@ def voice_restore(client, backups, running=game_running, wait=0, retries=5):
         # No DLL at all (deleted by hand): the game cannot start without one, so the original goes back.
         current = record.get('installed')
     except OSError as error:
-        print(f'Voice chat: cannot read {target} ({error}). Close the game and run join.py again, or: {VERIFY}.')
+        print(f'Voice chat: cannot read {target} ({error}). Close the game and run join-roe-os.py again, or: {VERIFY}.')
         return False
     if current != record.get('installed'):
         return True   # the original is back, or Steam replaced the file
@@ -510,7 +510,7 @@ def voice_restore(client, backups, running=game_running, wait=0, retries=5):
             return True
         time.sleep(1)
     print(f'Voice chat: could not put the original {VOICE_FILE} back in {client} ({error}). Close the game and run '
-          f'join.py again (it puts it back first), or: {VERIFY}.')
+          f'join-roe-os.py again (it puts it back first), or: {VERIFY}.')
     return False
 
 
@@ -580,7 +580,7 @@ def voice_setup(settings, client, backups, ask_path=False, question=None):
     """Our DLL and its hash, asking for its folder where needed: (dll, hash), or (None, None) for
     no voice this time. A DLL found goes into settings as voice_dll (its full path)."""
     question = question or ask
-    # The saved DLL, or when it is gone (or none is saved) the one next to join.py.
+    # The saved DLL, or when it is gone (or none is saved) the one next to join-roe-os.py.
     saved = settings.get('voice_dll')
     dll = Path(saved) if saved and Path(saved).is_file() else default_voice_dll()
     offer = ''
@@ -628,7 +628,7 @@ def voice_choice(settings, client, backups, option=None, question=None):
         print(f'Voice chat needs our {VOICE_FILE} in the game folder while the game runs (the original is put back afterwards).')
         voice = question('Use voice chat? (y/n)', 'y').lower().startswith('y')
         asked = True
-        print('Change it later with: join.py --voice on|off')
+        print('Change it later with: join-roe-os.py --voice on|off')
     if not voice:
         return False, None, None
     dll, digest = voice_setup(settings, client, backups, ask_path=option == 'on', question=question)
@@ -1193,7 +1193,7 @@ def parse_arguments(argv):
     backup = parser.add_mutually_exclusive_group()
     backup.add_argument('--export', nargs='?', const='', metavar='FILE',
                         help=f'write every server\'s accounts (their keys!) into one file ({BACKUP_FILE} by default) for another computer')
-    backup.add_argument('--import', dest='import_', metavar='FILE', help='merge such a file (also from join.cmd export) into this computer')
+    backup.add_argument('--import', dest='import_', metavar='FILE', help='merge such a file (also from join-roe-os.cmd export) into this computer')
     parser.add_argument('--admin', action='store_true',
                         help="GM accounts: open the server's admin page in the browser (with --server and --name as for a join)")
     parser.add_argument('--skip-file-check', action='store_true',
@@ -1201,7 +1201,7 @@ def parse_arguments(argv):
     parser.add_argument('--steam-setup', nargs='?', const='on', choices=('on', 'off'),
                         help='start through Steam: print the launch option line and offer to set it in Steam (Steam closed); '
                              'with --server/--name Steam starts join that server and account, else the last used; off removes it. '
-                             'Steam then runs: join.py [options] --steam %%command%%')
+                             'Steam then runs: join-roe-os.py [options] --steam %%command%%')
     parser.add_argument('--dry-run', action='store_true', default=bool(os.environ.get('ROE_JOIN_DRY_RUN')),
                         help='print what would be done: no server contact, no files written; also ROE_JOIN_DRY_RUN=1')
     return parser.parse_args(argv)
@@ -1302,7 +1302,7 @@ def script_versions(reply):
     return found
 
 
-def version_notice(reply, have=JOIN_VERSION, script='join.py'):
+def version_notice(reply, have=JOIN_VERSION, script='join-roe-os.py'):
     """Raises Failure when this script is older than the server needs; a line when a newer one
     exists, else None."""
     versions = script_versions(reply)
@@ -1374,7 +1374,7 @@ def server_info(reply):
 
 # --- Account backup ----------------------------------------------------------------------------
 # One JSON file with every server's accounts (names, keys, last use), certificate pin, address and
-# name, the same for join.py and join.cmd: {"format": "roe-join-accounts", "version": 1,
+# name, the same for join-roe-os.py and join-roe-os.cmd: {"format": "roe-join-accounts", "version": 1,
 # "servers": [{"address", "name", "pin", "accounts": [{"name", "token", "last_used"}]}]}.
 BACKUP_FORMAT = 'roe-join-accounts'
 BACKUP_WARNING = 'The file holds your account keys: anyone who has it can play as you. Keep it private.'
@@ -1428,7 +1428,7 @@ def import_accounts(root, settings, path, question=ask):
         backup = None
     if not isinstance(backup, dict) or backup.get('format') != BACKUP_FORMAT or not isinstance(backup.get('version'), int) \
             or isinstance(backup.get('version'), bool) or backup['version'] < 1:
-        raise Failure(f'{path} is no account backup of join.py or join.cmd.')
+        raise Failure(f'{path} is no account backup of join-roe-os.py or join-roe-os.cmd.')
     result = {'servers': saved_servers(settings), 'added': 0, 'updated': 0, 'skipped': []}
     for server in backup.get('servers') if isinstance(backup.get('servers'), list) else []:
         if not isinstance(server, dict):
@@ -1494,7 +1494,7 @@ def backup_command(options, settings, root=None, question=ask):
         servers, accounts = export_accounts(root, settings, path)
         print(f'Saved {accounts} accounts of {servers} servers in {path}.')
         print(BACKUP_WARNING)
-        print('On the other computer: python3 join.py --import <file> (or join.cmd import <file>).')
+        print('On the other computer: python3 join-roe-os.py --import <file> (or join-roe-os.cmd import <file>).')
         return 0
     path = Path(options.import_).expanduser()
     if not path.is_file():
@@ -1545,9 +1545,9 @@ def admin_command(options, settings, opener=None):
 
 
 # --- Started through Steam (launch options) ----------------------------------------------------
-# Steam's launch option `python3 "/path/join.py" --steam %command%` runs join.py with the game's own
+# Steam's launch option `python3 "/path/join-roe-os.py" --steam %command%` runs join-roe-os.py with the game's own
 # command after --steam: on Linux Steam's runtime and Proton, ending in the game folder's
-# SLauncher.exe (Steam's launch entry for Ring of Elysium: SLauncher.exe -steam -maintenance). join.py
+# SLauncher.exe (Steam's launch entry for Ring of Elysium: SLauncher.exe -steam -maintenance). join-roe-os.py
 # logs in as usual and runs that command with Europa_Client.exe and our arguments in place of the
 # launcher and its arguments, so Steam's overlay, playtime and Proton stay. --steam-setup prints the
 # line and can write it into Steam's localconfig.vdf (only while Steam is closed: Steam writes the
@@ -1561,7 +1561,7 @@ VDF_UNESCAPE = {'n': '\n', 't': '\t', '\\': '\\', '"': '"'}
 
 
 def split_steam_command(argv):
-    """(our arguments, Steam's command) of `join.py [options] --steam %command%`; None: not from Steam."""
+    """(our arguments, Steam's command) of `join-roe-os.py [options] --steam %command%`; None: not from Steam."""
     if '--steam' not in argv:
         return list(argv), None
     i = argv.index('--steam')
@@ -1826,8 +1826,8 @@ def steam_launch_line(script=None):
 
 
 def is_ours(launch):
-    """Whether launch options are join.cmd's or join.py's."""
-    return bool(launch) and bool(re.search(r'join\.(cmd|py)\b', launch, re.I))
+    """Whether launch options are join-roe-os.cmd's or join-roe-os.py's (or the old join.cmd's or join.py's, from before the rename)."""
+    return bool(launch) and bool(re.search(r'join(-roe-os)?\.(cmd|py)\b', launch, re.I))
 
 
 def steam_setup_command(options, settings, home=None, question=ask, choose=pick, running=steam_running, script=None):
@@ -1838,7 +1838,7 @@ def steam_setup_command(options, settings, home=None, question=ask, choose=pick,
     if off or not (options.server or options.name):
         settings.pop('steam', None)
         if not off:
-            print('Started from Steam, join.py joins the server and account you used last (--server and --name fix them).')
+            print('Started from Steam, join-roe-os.py joins the server and account you used last (--server and --name fix them).')
     else:
         server = steam_server(settings, options.server)
         if not server:
@@ -1851,7 +1851,7 @@ def steam_setup_command(options, settings, home=None, question=ask, choose=pick,
                 raise Failure(f'No saved account named {options.name} for {server}. Join once with it first.')
             profile['account'] = account_id(entry['token'])
         settings['steam'] = profile
-        print(f'Started from Steam, join.py joins {server}' + (f' as {options.name}.' if options.name else ' with its last used account.'))
+        print(f'Started from Steam, join-roe-os.py joins {server}' + (f' as {options.name}.' if options.name else ' with its last used account.'))
     if not options.dry_run:
         CONFIG.mkdir(parents=True, exist_ok=True)
         SETTINGS.write_text(json.dumps(settings, indent=2), encoding='utf-8')
@@ -1891,7 +1891,7 @@ def steam_setup_command(options, settings, home=None, question=ask, choose=pick,
 # Other launchers and lobby patchers change files of the Ring of Elysium folder (an XVersion folder
 # uses its parent's): blocks appended to the .sfc archives (menus, lobby banners and images, chat
 # texts, the intro video, the DirectX 12 notice) and the lobby room's caches. Their size and SHA-256
-# in the Steam install of 2022-0.2.989.0, as join.cmd's. Only these are hashed (about 290 MB, once:
+# in the Steam install of 2022-0.2.989.0, as join-roe-os.cmd's. Only these are hashed (about 290 MB, once:
 # the hashes are kept by size and write time in ~/.config/roe-join/file-check.json).
 ORIGINAL_FILES = (
     ('SFC/Common.sfc', 24781543, '8c220227044411b0282ca08196f68f78183bfe692b1ffdfa6bb9ed41868d0e35'),
@@ -2153,7 +2153,7 @@ def main(argv=None):
             return choose_account(accounts, options.name)
         found, entry = steam_account(settings, server, accounts)
         if not found:
-            print('The account join.py --steam-setup saved for Steam starts is no longer there. Choose one:')
+            print('The account join-roe-os.py --steam-setup saved for Steam starts is no longer there. Choose one:')
             return choose_account(accounts)
         return entry
     if options.dry_run:

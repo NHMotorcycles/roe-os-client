@@ -1,5 +1,5 @@
-# join.cmd's start through Steam in the folder Base that test_join.py made (localconfig.vdf samples
-# with join.py's edits of them, a fake Steam folder, a game folder): parses Source (join.cmd copied
+# join-roe-os.cmd's start through Steam in the folder Base that test_join.py made (localconfig.vdf samples
+# with join-roe-os.py's edits of them, a fake Steam folder, a game folder): parses Source (join-roe-os.cmd copied
 # to a .ps1), loads its top-level functions and prints OK or FAIL lines.
 param([string]$Source, [string]$Base)
 $ErrorActionPreference = 'Stop'
@@ -11,7 +11,7 @@ if ($errors.Count) { foreach ($e in $errors) { "FAIL parse: $e" }; exit 2 }
 foreach ($f in @($ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] })) {
     . ([ScriptBlock]::Create($f.Extent.Text))
 }
-# join.cmd's own constants for Steam.
+# join-roe-os.cmd's own constants for Steam.
 foreach ($s in @($ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -in @('$steamAppId', '$steamExes', '$steamLauncherArgs', '$steamId64Base', '$launchPath') })) {
     . ([ScriptBlock]::Create($s.Extent.Text))
 }
@@ -49,7 +49,7 @@ Check 'client base' ((Get-SteamClient $game '') -eq $game)
 Check 'client xversion' ((Get-SteamClient $game (Join-Path $game 'XVersion')) -eq (Join-Path $game 'XVersion'))
 Check 'client other' ((Get-SteamClient $game (Join-Path $Base 'steam')) -eq $game)
 
-# The Steam profile: the same account id as join.py's.
+# The Steam profile: the same account id as join-roe-os.py's.
 Check 'account id' ((Get-AccountId ('a' * 64)) -ceq 'ffe054fe7ae0cb6d' -and (Get-AccountId '') -eq '')
 $accounts = @([pscustomobject]@{ name = 'Anna'; token = 'a' * 64; last_used = 9 }, [pscustomobject]@{ name = 'Bob'; token = 'b' * 64; last_used = 5 })
 $settings = [pscustomobject]@{ servers = @([pscustomobject]@{ address = 'old.example'; last_used = 1 }, [pscustomobject]@{ address = 'new.example'; last_used = 7 }) }
@@ -61,19 +61,19 @@ $pick = Get-SteamAccount $settings 'old.example' $accounts
 $gone = Get-SteamAccount $settings 'old.example' @($accounts[0])
 Check 'profile' ((Get-SteamServer $settings '') -eq 'old.example' -and $pick.Found -and $pick.Entry.name -eq 'Bob' -and -not $gone.Found)
 
-# localconfig.vdf: the same text as join.py's edit, only that key, back to the original.
+# localconfig.vdf: the same text as join-roe-os.py's edit, only that key, back to the original.
 $sample = Read-Utf8 'sample.vdf'
 Check 'read' ($null -eq (Get-LaunchOptions $sample) -and (Get-LaunchOptions $sample '730') -ceq '-novid "quoted" C:\x')
-$line = '"C:\Users\A B\Desktop\join.cmd" %command%'
+$line = '"C:\Users\A B\Desktop\join-roe-os.cmd" %command%'
 $added = Set-LaunchOptions $sample $line
-Check 'set as join.py' ($added -ceq (Read-Utf8 'added.vdf') -and (Get-LaunchOptions $added) -ceq $line)
+Check 'set as join-roe-os.py' ($added -ceq (Read-Utf8 'added.vdf') -and (Get-LaunchOptions $added) -ceq $line)
 $changed = Set-LaunchOptions $added '-dx11'
 Check 'replace' ((Get-LaunchOptions $changed) -ceq '-dx11' -and $changed -ceq $sample.Replace("`"60437`"`n", "`"60437`"`n`t`t`t`t`t`t`"LaunchOptions`"`t`t`"-dx11`"`n"))
 Check 'remove' ((Set-LaunchOptions $changed $null) -ceq $sample -and (Set-LaunchOptions $sample $null) -ceq $sample)
-Check 'new block as join.py' ((Set-LaunchOptions (Read-Utf8 'other.vdf') '-x') -ceq (Read-Utf8 'other-added.vdf'))
+Check 'new block as join-roe-os.py' ((Set-LaunchOptions (Read-Utf8 'other.vdf') '-x') -ceq (Read-Utf8 'other-added.vdf'))
 $crlf = Read-Utf8 'crlf.vdf'
 $crlfAdded = Set-LaunchOptions $crlf '-x'
-Check 'crlf as join.py' ($crlfAdded -ceq (Read-Utf8 'crlf-added.vdf') -and (Set-LaunchOptions $crlfAdded $null) -ceq $crlf)
+Check 'crlf as join-roe-os.py' ($crlfAdded -ceq (Read-Utf8 'crlf-added.vdf') -and (Set-LaunchOptions $crlfAdded $null) -ceq $crlf)
 $bad = 0
 foreach ($damaged in @("`"UserLocalConfigStore`"`n{`n", "`"a`" `"b`" `"c`"`n", '"open', "`"Other`"`n{`n}`n")) {
     try { Set-LaunchOptions $damaged '-x' | Out-Null } catch { $bad++ }
@@ -90,7 +90,7 @@ Check 'user picked' ((Select-SteamUser $users).Id -eq '30642568')
 $config = $users[0].Path
 $original = [IO.File]::ReadAllBytes($config)
 $settingsPath = Join-Path $Base 'roe-join.json'
-$env:ROE_JOIN_SELF = 'C:\Users\A B\Desktop\join.cmd'
+$env:ROE_JOIN_SELF = 'C:\Users\A B\Desktop\join-roe-os.cmd'
 function Test-SteamRunning { return $true }
 Answer @('y')
 $refused = ''
@@ -103,7 +103,7 @@ Invoke-SteamSetup ([pscustomobject]@{ client = '' }) $false '' '' $steamFolder
 $text = [IO.File]::ReadAllText($config)
 $backups = @(Get-ChildItem -LiteralPath (Split-Path $config) -Filter '*.roe-join.bak')
 Check 'set' ((Get-LaunchOptions $text) -ceq $line -and $backups.Count -eq 1 -and (Same $original ([IO.File]::ReadAllBytes($backups[0].FullName))))
-Check 'set as join.py' ($text -ceq (Read-Utf8 'added.vdf'))
+Check 'set as join-roe-os.py' ($text -ceq (Read-Utf8 'added.vdf'))
 Answer @('y')
 Invoke-SteamSetup ([pscustomobject]@{ client = '' }) $true '' '' $steamFolder
 Check 'off' (Same $original ([IO.File]::ReadAllBytes($config)))
@@ -129,13 +129,17 @@ Check 'profile removed' ($null -eq (Get-Content -LiteralPath $settingsPath -Raw 
 # The window's Start through Steam: its launch option opens the window with Steam's command line.
 $self = $env:ROE_JOIN_SELF
 $windowLine = Get-SteamLaunchLine -Window
-Check 'window line' ($windowLine -ceq '"C:\Users\A B\Desktop\join.cmd" --window %command%' -and (Get-SteamLaunchLine) -ceq $line)
+Check 'window line' ($windowLine -ceq '"C:\Users\A B\Desktop\join-roe-os.cmd" --window %command%' -and (Get-SteamLaunchLine) -ceq $line)
 $found = Find-WindowSteamGame ('--window ' + $steam + ' -windowed')
 Check 'window: steam game' ($found -and $found.Folder -eq 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' -and (@($found.Extra) -join ',') -eq '-windowed' -and
     $null -eq (Find-WindowSteamGame '--window') -and $null -eq (Find-WindowSteamGame ''))
 Check 'launch states' ((Get-LaunchState $null) -eq 'off' -and (Get-LaunchState ' ') -eq 'off' -and (Get-LaunchState '-dx11') -eq 'other' -and
     (Get-LaunchState $windowLine) -eq 'window' -and (Get-LaunchState $line) -eq 'console' -and
-    (Get-LaunchState '"D:\Other\join.cmd" --window %command%') -eq 'moved' -and (Get-LaunchState '"c:\users\a b\desktop\JOIN.cmd" --window %command%') -eq 'window')
+    (Get-LaunchState '"D:\Other\join-roe-os.cmd" --window %command%') -eq 'moved' -and (Get-LaunchState '"c:\users\a b\desktop\JOIN-ROE-OS.cmd" --window %command%') -eq 'window')
+# A line set up before the rename (the old join.cmd next to this one) is ours, but for another copy.
+$oldLine = '"C:\Users\A B\Desktop\join.cmd" --window %command%'
+Check 'old name ours' ((Test-OurLaunchOptions $oldLine) -and (Test-OurLaunchOptions '"C:\x\join.py" %command%') -and (Get-LaunchState $oldLine) -eq 'moved' -and
+    -not (Test-OurLaunchOptions '"C:\x\rejoin.bat" %command%'))
 $state = Get-SteamSetupState $steamFolder
 $none = Get-SteamSetupState (Join-Path $Base 'nothing')
 Check 'setup state' ($state.State -eq 'other' -and $state.Options -ceq '-dx11' -and $none.State -eq 'nosteam')
@@ -158,6 +162,10 @@ Check 'write: replaced' ($result.Done -and -not $result.Closed -and (Get-LaunchO
 [IO.File]::WriteAllText($config, (Set-LaunchOptions $sample $line))
 $result = Invoke-SteamWrite $false $false $false $steamFolder
 Check 'write: console form replaced' ($result.Done -and (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -ceq $windowLine)
+[IO.File]::WriteAllText($config, (Set-LaunchOptions $sample $oldLine))
+Check 'old name: moved' ((Get-SteamSetupState $steamFolder).State -eq 'moved')
+$result = Invoke-SteamWrite $false $false $false $steamFolder
+Check 'write: old name replaced' ($result.Done -and (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -ceq $windowLine)
 $result = Invoke-SteamWrite $true $false $false $steamFolder
 Check 'write: off' ($result.Done -and $null -eq (Get-LaunchOptions ([IO.File]::ReadAllText($config))) -and (Get-SteamSetupState $steamFolder).State -eq 'off')
 New-Item -ItemType File -Force -Path (Join-Path $steamFolder 'steam.exe') | Out-Null
@@ -185,7 +193,7 @@ Set-SteamProfile @{ server = ''; account = '' }
 $read = Read-Settings
 Check 'profile texts' ($gone -like 'on roe-os.de, but its account is gone*' -and (Get-SteamProfileText $read) -eq 'on the server and with the account you used last' -and -not (Test-SteamAutoStart $read) -and
     (Get-SteamProfileText ([pscustomobject]@{ steam = [pscustomobject]@{ server = 'x.example'; account = '' } })) -eq 'on x.example with the account you used last there')
-Check 'state texts' ((Get-GuiSteamText 'off' $read).Text -eq 'Off.' -and (Get-GuiSteamText 'console' $read).Level -eq 'warn' -and (Get-GuiSteamText 'moved' $read).Text -like '*another folder*' -and
+Check 'state texts' ((Get-GuiSteamText 'off' $read).Text -eq 'Off.' -and (Get-GuiSteamText 'console' $read).Level -eq 'warn' -and (Get-GuiSteamText 'moved' $read).Text -like '*another copy*' -and
     (Get-GuiSteamText 'nosteam' $read).Text -like '*not found*' -and (Get-GuiSteamText '' $read).Text -eq 'Checking Steam ...')
 Check 'countdown text' ((Get-SteamCountdownText 3 'roe-os.de' 'Anna') -eq 'Started by Steam: the game starts in 3 s on roe-os.de as Anna.' -and
     (Get-SteamCountdownText 1 'roe-os.de' '') -like '*1 s on roe-os.de with a new account.')
