@@ -103,7 +103,6 @@ as that account. No password: the link works once, for one minute.
 
 - **Console version:** the same join.cmd, started in a command prompt (with or without
   arguments, or `join.cmd --console`), has commands and options for advanced users.
-- **Had join-gui.cmd?** It is gone: join.cmd opens the window now, delete join-gui.cmd.
 - **Details, building and testing:** [DEVELOPMENT.md](DEVELOPMENT.md)
 - **Changes:** [CHANGELOG.md](CHANGELOG.md)
 - **The server:** [ring-of-elysium-open-source](https://github.com/mschnati/ring-of-elysium-open-source)

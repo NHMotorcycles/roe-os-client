@@ -5,7 +5,7 @@ scripts' (`$joinVersion` in join.cmd, `JOIN_VERSION` in join.py); a server can a
 one (`roe_server set join-min-version`). The server's own changes are in its repository's
 CHANGELOG.md.
 
-## Unreleased
+## 1.0 (2026-11-20)
 
 - The window's voice chat box (and the box for Steam's auto start) only toggles on a click on the
   box itself, no longer on its text or the empty space next to it. Space still toggles it.
