@@ -1826,8 +1826,8 @@ def steam_launch_line(script=None):
 
 
 def is_ours(launch):
-    """Whether launch options are join-roe-os.cmd's or join-roe-os.py's (or the old join.cmd's or join.py's, from before the rename)."""
-    return bool(launch) and bool(re.search(r'join(-roe-os)?\.(cmd|py)\b', launch, re.I))
+    """Whether launch options are join-roe-os.cmd's, join-roe-os-window.cmd's or join-roe-os.py's (or the old join.cmd's or join.py's, from before the rename)."""
+    return bool(launch) and bool(re.search(r'join(-roe-os(-window)?)?\.(cmd|py)\b', launch, re.I))
 
 
 def steam_setup_command(options, settings, home=None, question=ask, choose=pick, running=steam_running, script=None):

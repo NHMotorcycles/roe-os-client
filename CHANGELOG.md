@@ -7,6 +7,11 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- For virus scanners that still flag join-roe-os.cmd: **separate-files/** has the same thing as
+  three plain files, `join-roe-os-window.cmd` (the window), `join-roe-os.cmd` (window or console,
+  as the single file) and `join-roe-os.ps1` (the PowerShell code). Download all three into one
+  folder and start join-roe-os-window.cmd. Same features, accounts and settings; Start through
+  Steam from there names join-roe-os-window.cmd (Set up once more after switching).
 - The join scripts are renamed: **join-roe-os.cmd** (was join.cmd) and **join-roe-os.py** (was
   join.py). Old copies keep working against the server, with the same saved accounts, keys,
   settings and Steam profile (`%APPDATA%\roe-join`, `~/.config/roe-join`). Start through Steam

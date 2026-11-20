@@ -31,6 +31,30 @@ The window's questions are dialogs, the messages go to its status line, its log 
 `%APPDATA%\roe-join\gui.log`. join-gui.cmd (until 0.9 the window, needing join.cmd next to it)
 is gone since 1.0: join-roe-os.cmd opens the window.
 
+## Separate files (separate-files/)
+
+For virus scanners that flag the single file (Kaspersky's `HEUR:Trojan.PowerShell.Agent.c` on
+the batch and PowerShell file that copies itself to a `.ps1`), `separate-files/` has the same
+thing as plain files, like join.cmd and join-gui.cmd before 1.0:
+
+- `join-roe-os.ps1`: all of join-roe-os.cmd's PowerShell part, run directly with `-File`.
+- `join-roe-os.cmd`: the batch part without the copy: the same choice of window or console, it
+  runs `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0join-roe-os.ps1"` (Bypass,
+  as the old join.cmd: a downloaded `.ps1` has the download's mark, which RemoteSigned refuses).
+- `join-roe-os-window.cmd`: always the window (`start /min`, or waited for when it has
+  arguments, as for Steam's `"<join-roe-os-window.cmd>" --window %command%`).
+
+The launchers pass what the code reads in the environment, as the single file does:
+`ROE_JOIN_SELF` (the started launcher), `ROE_JOIN_ARGS`, `ROE_JOIN_WINDOW`, and for these files
+`ROE_JOIN_CODE` (the `.ps1`: the window's worker loads it, the firewall step as administrator is
+a copy of it) and `ROE_JOIN_STEAM` (join-roe-os-window.cmd, which the window's Steam launch
+option names; a line of either launcher counts as this copy's). `join-roe-os.ps1` started on its
+own (Run with PowerShell) sets them as its join-roe-os.cmd would.
+
+The folder is generated, never edited by hand: after a change of join-roe-os.cmd run
+`python3 tools/make_separate_files.py` (`--check` only compares). The tests fail when the folder
+differs from what the tool makes.
+
 ## The console scripts
 
 ### join-roe-os.cmd (Windows)
@@ -179,5 +203,7 @@ python3 -m unittest discover -s tests -p test_join.py
 
 join-roe-os.py against fake Steam trees and game folders (the game file check on a fake install with original, changed, missing and added files and its cache); in WSL also join-roe-os.cmd's functions (console
 and window, no window shown) through `powershell.exe`, and its batch part's choice of window or
-console through `cmd.exe` (elsewhere those skip). The test that compares the version and
+console through `cmd.exe` (elsewhere those skip), and the same for separate-files/ (its launchers'
+choice, a real start of its join-roe-os.cmd with a download's mark on the `.ps1`, the window's
+code from its `.ps1`); separate-files/ must match what tools/make_separate_files.py makes. The test that compares the version and
 URL with the server's runs only inside the server's repository.

@@ -128,6 +128,13 @@ $admin = Test-Administrator
 $nothing = [pscustomobject]@{ Create = @(); Remove = @('ROE2022-test-none') }
 $direct = Invoke-Elevated $nothing $true
 Check 'direct step' ($(if ($admin) { $direct.Ok -and $direct.Reason -eq 'done' } else { -not $direct.Ok -and $direct.Reason -eq 'not-admin' }))
+# The separate files: the step is a copy of join-roe-os.ps1 (ROE_JOIN_CODE), not of the launcher.
+$env:ROE_JOIN_SELF = Join-Path $Base 'join-roe-os.cmd'
+$env:ROE_JOIN_CODE = $Source
+$split = Invoke-Elevated $nothing $true
+Check 'direct step: separate files' ($(if ($admin) { $split.Ok -and $split.Reason -eq 'done' } else { -not $split.Ok -and $split.Reason -eq 'not-admin' }))
+Remove-Item Env:\ROE_JOIN_CODE
+$env:ROE_JOIN_SELF = $Source
 if ($admin) {
     $failed = Invoke-Elevated ([pscustomobject]@{ Create = @([pscustomobject]@{ Name = 'ROE2022-test-bad'; Group = 'ROE2022-test'; Description = 'x'; Program = 'C:\x.exe'; RemoteAddress = @('no address') }); Remove = @() }) $true
     Check 'failed step' (-not $failed.Ok -and $failed.Reason -eq 'failed' -and $failed.Detail)

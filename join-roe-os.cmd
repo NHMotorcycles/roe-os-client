@@ -171,6 +171,13 @@ function Read-Settings {
     }
     return [pscustomobject]@{ client = ''; firewall = $null; voice = $null }
 }
+# The separate files (separate-files/, for virus scanners that flag this one file): join-roe-os.ps1
+# holds this code, and its launchers set ROE_JOIN_CODE to it and ROE_JOIN_STEAM to
+# join-roe-os-window.cmd, which the window's Steam launch option names. In this file: ROE_JOIN_SELF.
+function Get-JoinCodePath { if ($env:ROE_JOIN_CODE) { return $env:ROE_JOIN_CODE }; return $env:ROE_JOIN_SELF }
+function Get-WindowLauncher { if ($env:ROE_JOIN_STEAM) { return $env:ROE_JOIN_STEAM }; return $env:ROE_JOIN_SELF }
+# The files a launch option of this copy may name: the one started, and the window launcher.
+function Get-OwnLaunchers { return @(@($env:ROE_JOIN_SELF, $env:ROE_JOIN_STEAM) | Where-Object { $_ } | Select-Object -Unique) }
 function Ask([string]$Question, [string]$Default) {
     $suffix = ''
     if ($Default) { $suffix = " [$Default]" }
@@ -350,7 +357,7 @@ function Invoke-Elevated($Plan, [bool]$Admin = (Test-Administrator)) {
     try {
         Set-Content -LiteralPath $step -Value (ConvertTo-Json -InputObject $Plan -Depth 5) -Encoding UTF8
         # The bytes only: File.Copy would take a download's mark along, and PowerShell would refuse it.
-        [IO.File]::WriteAllBytes($script, [IO.File]::ReadAllBytes($env:ROE_JOIN_SELF))
+        [IO.File]::WriteAllBytes($script, [IO.File]::ReadAllBytes((Get-JoinCodePath)))
         if ($Admin) {
             & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $script -FirewallStep $step | Out-Host
             $code = $LASTEXITCODE
@@ -1936,13 +1943,18 @@ function Write-LaunchOptions([string]$Path, $Value, [string]$App = $steamAppId) 
     Move-Item -LiteralPath $temp -Destination $Path -Force
     return $backup
 }
-# The launch option: the console form (steam-setup), with -Window the window's ("<this file>" --window %command%).
+# The launch option: the console form (steam-setup), with -Window the window's ("<this file>" --window %command%;
+# of the separate files join-roe-os-window.cmd).
 function Get-SteamLaunchLine([string]$Self = $env:ROE_JOIN_SELF, [switch]$Window) {
-    if ($Window) { return "`"$Self`" --window %command%" }
+    if ($Window) {
+        if (-not $PSBoundParameters.ContainsKey('Self')) { $Self = Get-WindowLauncher }
+        return "`"$Self`" --window %command%"
+    }
     return "`"$Self`" %command%"
 }
-# Ours: a line naming join-roe-os.cmd or join-roe-os.py, or the old join.cmd or join.py (set up before the rename).
-function Test-OurLaunchOptions([string]$Launch) { return [bool]($Launch -and $Launch -match 'join(-roe-os)?\.(cmd|py)\b') }
+# Ours: a line naming join-roe-os.cmd, join-roe-os-window.cmd (the separate files) or join-roe-os.py, or the old
+# join.cmd or join.py (set up before the rename).
+function Test-OurLaunchOptions([string]$Launch) { return [bool]($Launch -and $Launch -match 'join(-roe-os(-window)?)?\.(cmd|py)\b') }
 # join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off]: the Steam profile and the launch
 # option line, written into Steam when the player wants (Steam closed). Steam: Get-SteamFolder's.
 function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name, [string]$Steam = (Get-SteamFolder)) {
@@ -1990,17 +2002,17 @@ function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name
 
 # The window started by Steam: the game in the command line after --window ($null: not by Steam).
 function Find-WindowSteamGame([string]$Text) { return Find-SteamGame (("$Text" -replace '^\s*--window(?=\s|$)', '').Trim()) }
-# What the game's launch options in Steam are for this join-roe-os.cmd (Self): off (none), other (not
+# What the game's launch options in Steam are for this join-roe-os.cmd (Self: its files, Get-OwnLaunchers): off (none), other (not
 # ours), window (ours, opens the window), console (ours, steam-setup's console form) or moved
 # (ours, but another copy: in another place, or the old join.cmd).
-function Get-LaunchState($Launch, [string]$Self = $env:ROE_JOIN_SELF) {
+function Get-LaunchState($Launch, [string[]]$Self = @(Get-OwnLaunchers)) {
     if (-not "$Launch".Trim()) { return 'off' }
     if (-not (Test-OurLaunchOptions "$Launch")) { return 'other' }
     $words = Split-CommandLine "$Launch"
-    $path = ''; $mine = ''
+    $path = ''
     try { $path = [IO.Path]::GetFullPath($words[0]) } catch { }
-    try { $mine = [IO.Path]::GetFullPath($Self) } catch { }
-    if (-not $path -or $path -ne $mine) { return 'moved' }
+    $mine = @(foreach ($file in @($Self | Where-Object { $_ })) { try { [IO.Path]::GetFullPath($file) } catch { } })
+    if (-not $path -or $mine -notcontains $path) { return 'moved' }
     if ($words -contains '--window') { return 'window' }
     return 'console'
 }
@@ -2013,7 +2025,7 @@ function Get-SteamTargets($Users) {
 }
 # Start through Steam now, for the window: State (nosteam, or the strongest of its users': window,
 # console, moved, other, off) and Options (that user's launch options).
-function Get-SteamSetupState([string]$Steam = (Get-SteamFolder), [string]$Self = $env:ROE_JOIN_SELF) {
+function Get-SteamSetupState([string]$Steam = (Get-SteamFolder), [string[]]$Self = @(Get-OwnLaunchers)) {
     $result = [pscustomobject]@{ State = 'nosteam'; Options = '' }
     $users = @(Get-SteamUsers $Steam)
     if (-not $users.Count) { return $result }
@@ -3224,6 +3236,12 @@ function Start-Gui([string]$Code) {
 
 # === Main part ================================================================================
 if ($FirewallStep) { exit (Invoke-FirewallStep $FirewallStep) }
+# join-roe-os.ps1 of the separate files started on its own (Run with PowerShell): as by its join-roe-os.cmd.
+if (-not $env:ROE_JOIN_SELF -and (Split-Path -Leaf "$PSCommandPath") -eq 'join-roe-os.ps1') {
+    $env:ROE_JOIN_CODE = $PSCommandPath
+    $env:ROE_JOIN_SELF = Join-Path (Split-Path -Parent $PSCommandPath) 'join-roe-os.cmd'
+    $env:ROE_JOIN_STEAM = Join-Path (Split-Path -Parent $PSCommandPath) 'join-roe-os-window.cmd'
+}
 # The .ps1 copies the batch part writes (run-*.ps1), once PowerShell has read them.
 Get-ChildItem -LiteralPath (Join-Path $env:APPDATA 'roe-join') -Filter 'run-*.ps1' -ErrorAction SilentlyContinue |
     Where-Object { $_.CreationTimeUtc -lt [DateTime]::UtcNow.AddMinutes(-10) } | Remove-Item -ErrorAction SilentlyContinue
@@ -3235,7 +3253,7 @@ if ($env:ROE_JOIN_WINDOW) {
         if (-not $env:ROE_JOIN_SELF) { throw 'Start join-roe-os.cmd by double-clicking it.' }
         $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]' })
         $gui = @{}
-        $joinCode = Get-JoinCode $env:ROE_JOIN_SELF
+        $joinCode = Get-JoinCode (Get-JoinCodePath)
         # This thread has the functions already; only Write-Host and Ask become the window's.
         Set-Item -Path function:Write-Host -Value ${function:Write-GuiHost}
         Set-Item -Path function:Ask -Value ${function:Read-GuiAnswer}

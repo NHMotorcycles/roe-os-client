@@ -140,6 +140,18 @@ Check 'launch states' ((Get-LaunchState $null) -eq 'off' -and (Get-LaunchState '
 $oldLine = '"C:\Users\A B\Desktop\join.cmd" --window %command%'
 Check 'old name ours' ((Test-OurLaunchOptions $oldLine) -and (Test-OurLaunchOptions '"C:\x\join.py" %command%') -and (Get-LaunchState $oldLine) -eq 'moved' -and
     -not (Test-OurLaunchOptions '"C:\x\rejoin.bat" %command%'))
+# The separate files: the window's line names join-roe-os-window.cmd (ROE_JOIN_STEAM); a line of either
+# launcher of that folder is this copy's.
+$env:ROE_JOIN_SELF = 'C:\Users\A B\Desktop\separate-files\join-roe-os.cmd'
+$env:ROE_JOIN_STEAM = 'C:\Users\A B\Desktop\separate-files\join-roe-os-window.cmd'
+$splitWindow = Get-SteamLaunchLine -Window
+Check 'separate files: lines and states' ($splitWindow -ceq '"C:\Users\A B\Desktop\separate-files\join-roe-os-window.cmd" --window %command%' -and
+    (Get-SteamLaunchLine) -ceq '"C:\Users\A B\Desktop\separate-files\join-roe-os.cmd" %command%' -and (Test-OurLaunchOptions $splitWindow) -and
+    (Get-LaunchState $splitWindow) -eq 'window' -and (Get-LaunchState (Get-SteamLaunchLine)) -eq 'console' -and (Get-LaunchState $windowLine) -eq 'moved' -and
+    (Get-LaunchState $windowLine $self) -eq 'window')
+$env:ROE_JOIN_SELF = $self
+Remove-Item Env:\ROE_JOIN_STEAM
+Check 'separate files: back to one file' ((Get-SteamLaunchLine -Window) -ceq $windowLine -and (Get-LaunchState $windowLine) -eq 'window')
 $state = Get-SteamSetupState $steamFolder
 $none = Get-SteamSetupState (Join-Path $Base 'nothing')
 Check 'setup state' ($state.State -eq 'other' -and $state.Options -ceq '-dx11' -and $none.State -eq 'nosteam')
