@@ -26,6 +26,8 @@ desktop). Open the link and click the download arrow at the top right ("Download
 
 Everything is saved, so next time it's just **Play**.
 
+
+> [!IMPORTANT]
 > **Played with other launchers before?** Many of them change your game files without asking. join.cmd checks this before every start: if it says your game files were changed, verify them in Steam (**Ring of Elysium > Properties > Installed Files > Verify integrity of game files**) and start again.
 
 ## :arrow_forward: Start through Steam
