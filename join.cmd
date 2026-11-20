@@ -1549,9 +1549,11 @@ function Connect-Account([string]$Ip, [string]$Folder, $Accounts, $Entry, [strin
     return [pscustomobject]@{ Uid = $uid; Name = $login.Name; Accounts = $service }
 }
 # --- The admin page (GM accounts) ------------------------------------------------------------
-# An account's role on the server from the answer to ROLE: 'gm', 'player', or '' (an unknown key,
-# an older server without ROLE, no answer). The window shows "Open the admin page" only for gm.
+# An account's role on the server from the answer to ROLE: 'admin', 'gm', 'player', or '' (an
+# unknown key, an older server without ROLE, no answer). The window shows "Open the admin page"
+# for gm and admin (an admin is a GM that may also change the server's technical settings).
 function Get-AccountRole([string]$Reply) {
+    if ($Reply -ceq 'OK admin') { return 'admin' }
     if ($Reply -ceq 'OK gm') { return 'gm' }
     if ($Reply -ceq 'OK player') { return 'player' }
     return ''
@@ -1672,7 +1674,7 @@ function Invoke-Work([string]$Command, [hashtable]$Arguments, [string]$Event = '
 
 # --- Work in the background --------------------------------------------------------------------
 # The selected server: its name, version and who plays where; refreshes the names of its saved
-# accounts (renamed in the game) and their roles (Roles: key -> gm or player, ROLE).
+# accounts (renamed in the game) and their roles (Roles: key -> admin, gm or player, ROLE).
 function Invoke-ServerJob([string]$Server) {
     $ips = Resolve-ServerIps (Get-ServerHost $Server)
     $folder = Get-AccountFolder $Server
@@ -1726,9 +1728,9 @@ function Get-GameFolderChoice([string]$Base, [bool]$Dx12) {
     return $result
 }
 # Whether the admin page's part shows for an account (Entry) of the server: only with GM rights
-# there (Roles from Invoke-ServerJob of that server).
+# there, as a GM or an admin (Roles from Invoke-ServerJob of that server).
 function Test-ShowAdmin($Roles, $Entry) {
-    return [bool]($Roles -and $Entry -and $Entry.token -and $Roles[$Entry.token] -eq 'gm')
+    return [bool]($Roles -and $Entry -and $Entry.token -and ($Roles[$Entry.token] -eq 'gm' -or $Roles[$Entry.token] -eq 'admin'))
 }
 # Play: the same steps as the console's main part, with the window's answers. Token and AccountName:
 # the saved account (New: a new one); UseVoice false: no voice chat this time. Returns once the

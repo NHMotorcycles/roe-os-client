@@ -1187,8 +1187,9 @@ def parse_arguments(argv):
 
 # --- The admin page (GM accounts) ---------------------------------------------------------------
 def account_role(reply):
-    """'gm' or 'player' from the answer to ROLE; '' for an unknown key, an older server or no answer."""
-    return {'OK gm': 'gm', 'OK player': 'player'}.get(reply or '', '')
+    """'admin', 'gm' or 'player' from the answer to ROLE; '' for an unknown key, an older server or no
+    answer. An admin is a GM that may also change the server's technical settings."""
+    return {'OK admin': 'admin', 'OK gm': 'gm', 'OK player': 'player'}.get(reply or '', '')
 
 
 def domain_host(host):

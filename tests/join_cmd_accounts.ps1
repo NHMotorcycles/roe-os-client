@@ -158,6 +158,7 @@ Check 'login step without a service' ($r.Uid -eq '1' -and -not $r.Accounts -and 
 # or https://admin.<domain>; non-GM accounts and servers without a page get a reason.
 $tk = 'f' * 64
 Check 'roles' ((Get-AccountRole 'OK gm') -eq 'gm' -and (Get-AccountRole 'OK player') -eq 'player' -and (Get-AccountRole 'INVALID') -eq '' -and
+    (Get-AccountRole 'OK admin') -eq 'admin' -and (Get-AccountRole 'OK Admin') -eq '' -and
     (Get-AccountRole $null) -eq '' -and (Get-AccountRole 'OK GM') -eq '')
 Check 'domains' ((Test-DomainHost 'roe-os.de') -and (Test-DomainHost 'play.example.org') -and -not (Test-DomainHost '203.0.113.5') -and
     -not (Test-DomainHost '::1') -and -not (Test-DomainHost 'localhost') -and -not (Test-DomainHost 'a b.de'))

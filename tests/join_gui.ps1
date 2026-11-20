@@ -84,6 +84,7 @@ Update-AdminPanel
 $other = "$($gui.C.AdminPanel.Visibility)"
 Check 'admin part: GM only' ($shown -eq 'Visible' -and $player -eq 'Collapsed' -and $new -eq 'Collapsed' -and $other -eq 'Collapsed')
 Check 'admin shown' ((Test-ShowAdmin @{ $ga = 'gm' } ([pscustomobject]@{ token = $ga })) -and -not (Test-ShowAdmin @{ $ga = 'player' } ([pscustomobject]@{ token = $ga })) -and
+    (Test-ShowAdmin @{ $ga = 'admin' } ([pscustomobject]@{ token = $ga })) -and
     -not (Test-ShowAdmin $null ([pscustomobject]@{ token = $ga })) -and -not (Test-ShowAdmin @{ $ga = 'gm' } $null) -and -not (Test-ShowAdmin @{ '' = 'gm' } ([pscustomobject]@{ token = '' })))
 $gui.Servers = @(); $gui.Accounts = @(); $gui.Roles = $null; $gui.RolesServer = ''
 

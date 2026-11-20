@@ -5,6 +5,12 @@ scripts' (`$joinVersion` in join.cmd, `JOIN_VERSION` in join.py); a server can a
 one (`roe_server set join-min-version`). The server's own changes are in its repository's
 CHANGELOG.md.
 
+## Unreleased
+
+- Admin accounts: a server can now mark an account as admin (a GM that may also change the
+  server's technical settings). join.cmd's window shows **Open the admin page** for such an
+  account too, and `join.py --admin` takes it like a GM's.
+
 ## 1.0 (2026-11-19)
 
 - Game files changed by other launchers: before the game starts, join.cmd (window and console)

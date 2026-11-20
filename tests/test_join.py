@@ -473,7 +473,8 @@ T1, T2, T3, T4, T5 = 'a' * 64, 'b' * 64, 'c' * 64, 'd' * 64, 'e' * 64
 class AdminPage(unittest.TestCase):
     """--admin: the role, then the one-time link; its address from the server or https://admin.<domain>."""
     def test_role_and_link(self):
-        self.assertEqual([join.account_role(r) for r in ('OK gm', 'OK player', 'INVALID', None, 'OK GM')], ['gm', 'player', '', '', ''])
+        self.assertEqual([join.account_role(r) for r in ('OK gm', 'OK player', 'INVALID', None, 'OK GM', 'OK admin', 'OK Admin')],
+                         ['gm', 'player', '', '', '', 'admin', ''])
         self.assertTrue(join.domain_host('roe-os.de') and join.domain_host('play.example.org'))
         self.assertFalse(join.domain_host('203.0.113.5') or join.domain_host('::1') or join.domain_host('localhost') or join.domain_host('a b.de'))
         self.assertEqual(join.admin_link(f'OK {T1} -', 'Roe-OS.de'), (f'https://admin.roe-os.de/login?ticket={T1}', None))
