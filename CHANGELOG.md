@@ -7,6 +7,10 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- Steam's Play button can open the join window again, set up by hand: the launch option
+  `"<path>\join-roe-os.cmd" --window %command%` (README, "Start it from Steam"). `--window` with
+  more after it now opens the window; the window ignores Steam's game command and starts the game
+  itself. join-roe-os.cmd does not touch Steam's settings.
 - Start through Steam is removed from join-roe-os.cmd, for virus scanners: no `steam-setup`, no
   **Set up starting through Steam** section in the window, no changes to Steam's settings
   (localconfig.vdf), no closing or starting of Steam. The window's PowerShell starts hidden

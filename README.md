@@ -32,6 +32,24 @@ Everything is saved, so next time it's just **Play**.
 
 **Still can't connect?** Check out the [Firewall](#shield-firewall) section.
 
+### Start it from Steam (optional)
+
+Steam's **Play** button can open the join window instead of the normal game launcher:
+
+1. In Steam, right-click **Ring of Elysium > Properties > General**.
+2. Under **Launch Options** enter the path of your join-roe-os.cmd in quotes, then
+   `--window %command%`, for example:
+
+   ```
+   "C:\Users\you\Desktop\join-roe-os.cmd" --window %command%
+   ```
+
+   (Shift + right-click join-roe-os.cmd > **Copy as path** gives you the quoted path.)
+3. Click **Play** in Steam: the join window opens, and you start the game with its **Play**.
+
+To go back to the normal launcher, empty the launch options. If you move join-roe-os.cmd, change
+the path there too.
+
 ## :globe_with_meridians: Our Server
 
 ### roe-os.de

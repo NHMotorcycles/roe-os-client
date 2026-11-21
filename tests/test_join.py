@@ -1171,8 +1171,9 @@ class JoinCmdStart(unittest.TestCase):
         self.assertEqual(self.run_batch(base, f'"{path}"'), ['MODE console []'])
         self.assertEqual(self.run_batch(base, f'"{path}" export'), ['MODE console [export]'])
         self.assertEqual(self.run_batch(base, f'"{path}" --window'), ['MODE window'])
-        # --window with more after it: the console (it says what it takes).
-        self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window -x"'), ['MODE console [--window -x]'])
+        # --window with more after it (Steam's launch option --window %command%): the window.
+        self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window -x"'), ['MODE window'])
+        self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window "C:\\Steam\\steamapps\\common\\Ring of Elysium\\SLauncher.exe" -steam -maintenance"'), ['MODE window'])
         self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --windowed"'), ['MODE console [--windowed]'])
 
     def test_window_or_console(self):

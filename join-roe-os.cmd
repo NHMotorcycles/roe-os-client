@@ -13,11 +13,15 @@ type "%~f0" > "%ROE_JOIN_PS1%" || goto :no_script
 setlocal EnableDelayedExpansion
 rem The window: no arguments and not typed in a command prompt (a double-click, a shortcut and
 rem PowerShell run cmd.exe /c "...join-roe-os.cmd"; the cmd.exe of a prompt has no /c), or --window.
+rem --window with more after it is the window too: Steam's launch option "...join-roe-os.cmd" --window
+rem %command% adds the game's command, which the window ignores (it starts the game itself).
 rem A copy of cmdcmdline: the dynamic variable itself takes no :old=new.
 set "ROE_JOIN_LINE=!cmdcmdline!"
 if not defined ROE_JOIN_ARGS (
   if /i not "!ROE_JOIN_LINE: /c=!"=="!ROE_JOIN_LINE!" set "ROE_JOIN_WINDOW=1"
 ) else if /i "!ROE_JOIN_ARGS!"=="--window" (
+  set "ROE_JOIN_WINDOW=1"
+) else if /i "!ROE_JOIN_ARGS:~0,9!"=="--window " (
   set "ROE_JOIN_WINDOW=1"
 )
 if defined ROE_JOIN_WINDOW (
