@@ -34,24 +34,11 @@ Everything is saved, so next time it's just **Play**.
 
 ### Start it from Steam (optional)
 
-Steam's **Play** button can open the join window instead of the normal game launcher:
+Steam's **Play** button can open the join window instead of the normal game launcher, like this your friends can see it and you can increase your hours played.
 
-1. In Steam, right-click **Ring of Elysium > Properties > General**.
-2. Under **Launch Options** enter the path of your join-roe-os.cmd in quotes, then
-   `--window %command%`, for example:
+For that you need the launcher in the [with-steam](https://github.com/mschnati/roe-os-client/blob/main/with-steam/join-roe-os.cmd) folder.
 
-   ```
-   "C:\Users\you\Desktop\join-roe-os.cmd" --window %command%
-   ```
-
-   (Shift + right-click join-roe-os.cmd > **Copy as path** gives you the quoted path.)
-3. Click **Play** in Steam: the join window opens, and you start the game with its **Play**.
-
-Or use [with-steam/join-roe-os.cmd](with-steam/join-roe-os.cmd): it sets this up for you from its window
-(some virus scanners flag that copy).
-
-To go back to the normal launcher, empty the launch options. If you move join-roe-os.cmd, change
-the path there too.
+Its not the main client because Kaspersky doesnt like it and flags it.
 
 ## :globe_with_meridians: Our Server
 
