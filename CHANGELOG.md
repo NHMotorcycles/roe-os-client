@@ -7,6 +7,13 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- Start through Steam is removed from join-roe-os.cmd, for virus scanners: no `steam-setup`, no
+  **Set up starting through Steam** section in the window, no changes to Steam's settings
+  (localconfig.vdf), no closing or starting of Steam, and the window no longer hides its console
+  (it stays minimized in the taskbar). If you had set it up, remove the line from Steam's launch
+  options (Ring of Elysium > Properties > General) and start join-roe-os.cmd yourself.
+  separate-files/ is now two files, `join-roe-os.cmd` and `join-roe-os.ps1`. On Linux,
+  `python3 join-roe-os.py --steam-setup` stays.
 - For virus scanners that still flag join-roe-os.cmd: **separate-files/** has the same thing as
   three plain files, `join-roe-os-window.cmd` (the window), `join-roe-os.cmd` (window or console,
   as the single file) and `join-roe-os.ps1` (the PowerShell code). Download all three into one

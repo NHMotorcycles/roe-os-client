@@ -40,27 +40,6 @@ Everything is saved, so next time it's just **Play**.
 - Region Asia for a custom developed **Duel** game mode, on german servers
 - Region America is ready to go online and let you play on NA servers, as soon as it makes sense with the player numbers
 
-## :arrow_forward: Start through Steam
-
-Want Steam's **Play** button, overlay and playtime? Play once with join-roe-os.cmd as above, then:
-
-1. In join-roe-os.cmd's window, pick the server and account Steam should use, open **Set up starting
-   through Steam** and click **Set up Start through Steam**.
-2. If Steam is open, join-roe-os.cmd asks to close it (Steam must be closed for this) and offers to
-   start it again when it is done.
-3. Press **Play** in Steam. join-roe-os.cmd's window opens and starts the game after 3 seconds
-   (**Cancel** stops that). It closes itself when the game exits.
-
-By hand instead: the same section shows the launch option line (`"<path>\join-roe-os.cmd" --window
-%command%`) with a **Copy** button. Paste it in Steam: **Ring of Elysium > Properties > General >
-Launch options** (Steam may stay open for this). Steam's Play then joins the server and account you
-used last.
-
-Another server or account for Steam: select it and click the button again. Wait for **Play**
-instead of starting at once: untick the box below the button. **Turn it off** undoes it. Don't move
-join-roe-os.cmd afterwards (or set it up again). Linux: `python3 join-roe-os.py --steam-setup` (no window there).
-
-
 ## :bust_in_silhouette: Your account
 
 - **Name:** a new account gets a name like `newaccount1234`. You choose your real name in the
@@ -91,7 +70,8 @@ still fails, the window tells you why under **Details**. Its probably because an
 
 Download [join-roe-os.py](https://github.com/mschnati/roe-os-client/blob/main/join-roe-os.py) and run
 `python3 join-roe-os.py` in a terminal. It finds the game in Steam and starts it with Proton. Same
-servers, accounts and voice chat as on Windows (no firewall step).
+servers, accounts and voice chat as on Windows (no firewall step). Steam's Play button can start it
+too: `python3 join-roe-os.py --steam-setup`.
 
 ## :gear: Server admins (GM accounts)
 

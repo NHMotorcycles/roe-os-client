@@ -11,11 +11,7 @@ share the settings, accounts and keys. Its batch part decides:
 - **The window** when it has no arguments and was not typed in a command prompt: a double-click
   (Explorer runs `cmd.exe /c ""...\join-roe-os.cmd" "`), a shortcut, or `.\join-roe-os.cmd` from PowerShell
   all start cmd.exe with `/c`, a command prompt's own cmd.exe has none. `join-roe-os.cmd --window`
-  forces it. The window hides its PowerShell's console itself, so no console stays open. `--window` with more after it (Steam's launch option `"<join-roe-os.cmd>" --window
-  %command%`) is the window too, and then the batch part waits for it instead of `start`ing it,
-  so the process Steam started lives as long as the game. The window hides the console it was
-  started from (cmd.exe's in that case); in Windows Terminal, which only minimizes for that, it
-  hides the terminal window when that holds just this tab.
+  forces it. The batch part `start`s it minimized (`start /min`) and ends.
 - **The console** with any argument (`-Server`, `-Name`, `firewall`, `voice`, `export`,
   `import`, `admin`), or typed in a command prompt without arguments. `join-roe-os.cmd --console`
   forces it, for example from PowerShell.
@@ -41,15 +37,12 @@ thing as plain files, like join.cmd and join-gui.cmd before 1.0:
 - `join-roe-os.cmd`: the batch part without the copy: the same choice of window or console, it
   runs `powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0join-roe-os.ps1"` (Bypass,
   as the old join.cmd: a downloaded `.ps1` has the download's mark, which RemoteSigned refuses).
-- `join-roe-os-window.cmd`: always the window (`start /min`, or waited for when it has
-  arguments, as for Steam's `"<join-roe-os-window.cmd>" --window %command%`).
 
-The launchers pass what the code reads in the environment, as the single file does:
+The launcher passes what the code reads in the environment, as the single file does:
 `ROE_JOIN_SELF` (the started launcher), `ROE_JOIN_ARGS`, `ROE_JOIN_WINDOW`, and for these files
 `ROE_JOIN_CODE` (the `.ps1`: the window's worker loads it, the firewall step as administrator is
-a copy of it) and `ROE_JOIN_STEAM` (join-roe-os-window.cmd, which the window's Steam launch
-option names; a line of either launcher counts as this copy's). `join-roe-os.ps1` started on its
-own (Run with PowerShell) sets them as its join-roe-os.cmd would.
+a copy of it). `join-roe-os.ps1` started on its own (Run with PowerShell) sets them as its
+join-roe-os.cmd would.
 
 The folder is generated, never edited by hand: after a change of join-roe-os.cmd run
 `python3 tools/make_separate_files.py` (`--check` only compares). The tests fail when the folder
@@ -102,63 +95,16 @@ at the address the server names (`roe_server set admin-url URL`), else at
 one without the page (`NONE`) or an older one (`INVALID`) gets a clear message. The server checks
 the GM rights again at the login and at every change, so the hidden button is only convenience.
 
-### Start through Steam
+### Start through Steam (Linux only)
 
-Steam's launch entry for Ring of Elysium (app 755790) is `SLauncher.exe -steam -maintenance` in
-the game folder, and `%command%` in the launch options stands for that line. With the launch
-option `"<path>\join-roe-os.cmd" %command%` Steam starts join-roe-os.cmd with
-`"<game folder>\SLauncher.exe" -steam -maintenance` (Windows runs a .cmd through `cmd.exe /c`, so
-it is the console version). join-roe-os.cmd finds the exe among the arguments; options in front of it
-(`-Server`, `-Name`, `--skip-file-check`) are join-roe-os.cmd's. It joins without menus: the server and
-account of the profile `steam-setup` saved, else the last used ones (the first start without any
-asks in the console). It starts `Europa_Client.exe` of Steam's folder (its `XVersion` when that is
-the saved game folder) with our arguments; Steam's two launcher arguments are dropped, anything
-the player wrote after `%command%` is passed on. It waits for the game and puts the voice DLL back
-as usual; Steam counts the time until join-roe-os.cmd ends.
-
-`join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup` prints the line, saves the profile
-(`steam` in roe-join.json: the server and the start of the account key's SHA-256, not the key;
-without `-Server`/`-Name` none, so the last used ones count) and offers to set it in Steam:
-`userdata\<id>\config\localconfig.vdf`, key `UserLocalConfigStore > Software > Valve > Steam >
-apps > 755790 > LaunchOptions`. Steam writes that file back when it exits, so it refuses while
-Steam runs. It takes the user folder whose file has the game (asks when several have), saves the
-file as `localconfig.vdf.<date>.roe-join.bak` next to it and changes only that key (a small VDF
-reader that keeps the rest byte for byte). `steam-setup off` removes our line (someone else's
-launch options stay) and the profile.
-
-The window's **Advanced > Start through Steam** does the same without a console and writes the
-window form `"<path>\join-roe-os.cmd" --window %command%`:
-
-- **The state** (read in the worker at the start and after each change): for the Steam users
-  that played the game (else the most recently logged in one) the launch options are off, someone
-  else's, ours in the window form for this join-roe-os.cmd (on: it names the profile's server and
-  account), ours in the console form, or ours for a join-roe-os.cmd elsewhere or the old join.cmd (then Set up offers the
-  window form for this one).
-- **Set up** saves the selected server and account as the profile (`steam.server`,
-  `steam.account` as for steam-setup). When the window form is already in Steam that is all
-  (Steam is not touched). Otherwise, with Steam running, it asks to close it, runs `steam.exe
-  -shutdown` (else `steam://exit`), waits up to 60 s for every `steam` process to end, then sets
-  the line for those users (backup next to localconfig.vdf as above). Someone else's launch
-  options are replaced only after a question; ours in the console form or for another path are
-  replaced at once. Afterwards it offers to start Steam again. **Turn it off** removes our line
-  the same way and clears the profile's server and account.
-- **The box** "When Steam starts the game, join at once" is `steam.auto_start` (missing: on).
-
-Started that way (`--window` followed by a command line naming `SLauncher.exe` or
-`Europa_Client.exe`), the window takes Steam's game folder (its `XVersion` when that is the saved
-one), the server and account as the console's Steam start does (profile, else the last used
-ones), shows a bar above Play and, with auto start, counts down 3 s (**Cancel** stops it) and
-presses Play; without it, or when the profile's account is gone or the game folder has a problem,
-it waits for Play. What followed `%command%` goes to the game. When the game exits it closes
-itself (after putting the voice DLL back), so Steam's Playing ends; after a failed join it stays
-open. The console form keeps working as before.
-
-join-roe-os.py does the same on Linux: `python3 join-roe-os.py --steam-setup [off]` (with `--server`, `--name`),
+join-roe-os.cmd has no Start through Steam (removed for virus scanners: no edits of Steam's
+settings, no closing of Steam); start it yourself. On Linux `python3 join-roe-os.py --steam-setup [off]`
+(with `--server`, `--name`),
 launch option `python3 "/path/join-roe-os.py" --steam %command%`. There `%command%` is Steam's whole
 chain (reaper, the Steam Linux Runtime, Proton, then SLauncher.exe); join-roe-os.py runs it with
 `Europa_Client.exe` and our arguments in place of SLauncher.exe and its arguments, so Steam's
 Proton and prefix are used. A failure without a terminal shows a message with zenity, kdialog or
-notify-send when one exists. join-roe-os.py has no window, so its Steam start stays this console one.
+notify-send when one exists.
 
 ## The voice DLL
 
@@ -203,7 +149,7 @@ python3 -m unittest discover -s tests -p test_join.py
 
 join-roe-os.py against fake Steam trees and game folders (the game file check on a fake install with original, changed, missing and added files and its cache); in WSL also join-roe-os.cmd's functions (console
 and window, no window shown) through `powershell.exe`, and its batch part's choice of window or
-console through `cmd.exe` (elsewhere those skip), and the same for separate-files/ (its launchers'
+console through `cmd.exe` (elsewhere those skip), and the same for separate-files/ (its launcher's
 choice, a real start of its join-roe-os.cmd with a download's mark on the `.ps1`, the window's
 code from its `.ps1`); separate-files/ must match what tools/make_separate_files.py makes. The test that compares the version and
 URL with the server's runs only inside the server's repository.

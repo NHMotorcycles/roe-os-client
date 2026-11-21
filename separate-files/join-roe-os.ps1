@@ -1,7 +1,6 @@
 # join-roe-os.ps1: the PowerShell part of join-roe-os.cmd as a file of its own, for virus scanners
-# that flag the single file. Keep join-roe-os.cmd and join-roe-os-window.cmd of this folder next to
-# it and start one of them (join-roe-os-window.cmd: the window); they set what this code reads
-# (ROE_JOIN_SELF, ROE_JOIN_CODE, ROE_JOIN_STEAM, ROE_JOIN_ARGS, ROE_JOIN_WINDOW).
+# that flag the single file. Keep join-roe-os.cmd of this folder next to it and start that; it sets
+# what this code reads (ROE_JOIN_SELF, ROE_JOIN_CODE, ROE_JOIN_ARGS, ROE_JOIN_WINDOW).
 # Generated from join-roe-os.cmd by tools/make_separate_files.py: change that file, not this one.
 
 # Join a Ring of Elysium 2022 server (roe_server) as a player.
@@ -10,8 +9,7 @@
 # servers (on the first start roe-os.de, "Add server..." for another one) and who plays where on
 # the selected one; the accounts on that server ("Create a new account" makes one); the game
 # folder (the Ring of Elysium folder, with a DirectX 12 box for its XVersion folder); voice chat;
-# and Play. "Set up starting through Steam": Steam's Play button through the window (below). Under
-# "Advanced": the firewall rules (on, off, reset, show), the account backup
+# and Play. Under "Advanced": the firewall rules (on, off, reset, show), the account backup
 # (export, import) and the log; for an account with GM rights on the selected server (ROLE) also
 # "Open the admin page" (for others it is not shown; the server checks the rights again).
 #
@@ -79,14 +77,6 @@
 # the browser with a one-time login link (ROLE, then WEB; the server sends the page's address or
 # it is https://admin.<the server's domain>). Other accounts are told they have no GM rights.
 #
-# Steam: with the launch option "<this file>" %command% Steam's Play button starts join-roe-os.cmd with the
-# game's command line; it joins the server and account of join-roe-os.cmd steam-setup (else the last used
-# ones) and starts the game itself. join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off]
-# prints the line and sets (or removes) it in Steam while Steam is closed. The window's section
-# "Set up starting through Steam" shows "<this file>" --window %command% to paste (Copy) and sets
-# it (closing Steam first when the player agrees): Steam's Play button then opens the window,
-# which joins the server and account saved there and closes itself when the game exits.
-#
 # Account backup: join-roe-os.cmd export [FILE] writes every server's accounts (their keys), certificate
 # pin and name into one file (default roe-join-accounts.json here); join-roe-os.cmd import FILE merges
 # one into this computer. join-roe-os.py reads and writes the same file (--export, --import).
@@ -111,10 +101,6 @@ $joinRoot = Join-Path $env:APPDATA 'roe-join'
 # roe-join.json as the console and the window write it.
 function Save-JoinSettings([string]$Client, $Firewall, $Voice, $VoiceDll, $Servers) {
     $values = [ordered]@{ client = $Client; firewall = $Firewall; voice = $Voice; voice_dll = $VoiceDll; servers = @($Servers) }
-    # The Steam profile (join-roe-os.cmd steam-setup) stays.
-    $steam = $null
-    try { if (Test-Path -LiteralPath $settingsPath) { $steam = (Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json).steam } } catch { }
-    if ($steam) { $values.steam = $steam }
     [pscustomobject]$values | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
 }
 function Read-Settings {
@@ -128,12 +114,8 @@ function Read-Settings {
     return [pscustomobject]@{ client = ''; firewall = $null; voice = $null }
 }
 # The separate files (separate-files/, for virus scanners that flag this one file): join-roe-os.ps1
-# holds this code, and its launchers set ROE_JOIN_CODE to it and ROE_JOIN_STEAM to
-# join-roe-os-window.cmd, which the window's Steam launch option names. In this file: ROE_JOIN_SELF.
+# holds this code, and its launcher sets ROE_JOIN_CODE to it. In this file: ROE_JOIN_SELF.
 function Get-JoinCodePath { if ($env:ROE_JOIN_CODE) { return $env:ROE_JOIN_CODE }; return $env:ROE_JOIN_SELF }
-function Get-WindowLauncher { if ($env:ROE_JOIN_STEAM) { return $env:ROE_JOIN_STEAM }; return $env:ROE_JOIN_SELF }
-# The files a launch option of this copy may name: the one started, and the window launcher.
-function Get-OwnLaunchers { return @(@($env:ROE_JOIN_SELF, $env:ROE_JOIN_STEAM) | Where-Object { $_ } | Select-Object -Unique) }
 function Ask([string]$Question, [string]$Default) {
     $suffix = ''
     if ($Default) { $suffix = " [$Default]" }
@@ -1629,460 +1611,19 @@ function Request-AdminLink([string]$Ip, [string]$Folder, [string]$HostName, $Ent
 
 # Our voice DLL in (VoicePick: Get-VoiceChoice's Pick, $null: no voice), then the game, connected
 # to the server. Returns Process and VoiceOn: when true, Restore-Voice once the game exits.
-function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick, [string[]]$Extra = @()) {
+function Start-Game([string]$Client, [string]$Uid, [string]$Ip, $VoicePick) {
     Write-Host ''
     Write-Host 'Starting the game.'
     $voiceOn = $false
     if ($VoicePick -and $VoicePick.Hash) { $voiceOn = Install-Voice $Client $VoicePick.Dll $VoicePick.Hash }
     try {
-        $gameArgs = @('-language=en', '-garena', "-uid=$Uid", "-server=${Ip}:$lobbyPort") + @($Extra | Where-Object { $_ } | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
+        $gameArgs = @('-language=en', '-garena', "-uid=$Uid", "-server=${Ip}:$lobbyPort")
         $game = Start-Process -FilePath (Join-Path $Client 'Europa_Client.exe') -WorkingDirectory $Client -PassThru -ArgumentList $gameArgs
     } catch {
         if ($voiceOn) { Restore-Voice $Client 15 | Out-Null }
         throw
     }
     return [pscustomobject]@{ Process = $game; VoiceOn = $voiceOn }
-}
-
-# --- Started through Steam (launch options) ---------------------------------------------------
-# Steam's launch option "<this file>" %command% runs join-roe-os.cmd with the game's own command line:
-# Steam's launch entry for Ring of Elysium, "<game folder>\SLauncher.exe" -steam -maintenance.
-# join-roe-os.cmd then joins without menus (the server and account of join-roe-os.cmd steam-setup, else the last
-# used ones) and starts Europa_Client.exe of that folder (or its XVersion when that was the last
-# game folder) with our arguments instead of the launcher; what the player wrote after %command%
-# is passed on. join-roe-os.cmd steam-setup prints the line and can write it into Steam's localconfig.vdf
-# (only while Steam is closed: Steam writes the file back when it exits).
-$steamAppId = '755790'
-$steamExes = @('SLauncher.exe', 'Europa_Client.exe')
-$steamLauncherArgs = @('-steam', '-maintenance')
-$steamId64Base = [int64]76561197960265728
-$launchPath = @('UserLocalConfigStore', 'Software', 'Valve', 'Steam', 'apps')
-# The words of a command line: blanks split, double quotes group (and are dropped).
-function Split-CommandLine([string]$Text) {
-    $words = New-Object Collections.ArrayList
-    $word = New-Object Text.StringBuilder
-    $quoted = $false
-    $has = $false
-    foreach ($c in "$Text".ToCharArray()) {
-        if ($c -eq [char]'"') { $quoted = -not $quoted; $has = $true; continue }
-        if (-not $quoted -and [char]::IsWhiteSpace($c)) {
-            if ($has) { [void]$words.Add($word.ToString()); [void]$word.Clear(); $has = $false }
-            continue
-        }
-        [void]$word.Append($c)
-        $has = $true
-    }
-    if ($has) { [void]$words.Add($word.ToString()) }
-    return ,([string[]]$words.ToArray([string]))
-}
-# The game in Steam's command line: Folder (of its exe), Before (our options in front of it, as
-# text) and Extra (what follows Steam's own arguments); $null when there is none.
-function Find-SteamGame([string]$Text) {
-    $words = Split-CommandLine $Text
-    for ($i = 0; $i -lt $words.Count; $i++) {
-        if ($steamExes -notcontains (($words[$i] -split '[\\/]')[-1])) { continue }
-        $before = @(); if ($i -gt 0) { $before = @($words[0..($i - 1)]) }
-        $after = @(); if ($i + 1 -lt $words.Count) { $after = @($words[($i + 1)..($words.Count - 1)]) }
-        $quotedBefore = @($before | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } })
-        return [pscustomobject]@{ Folder = (Split-Path -Parent $words[$i]); Before = ($quotedBefore -join ' ')
-            Extra = [string[]]@($after | Where-Object { $steamLauncherArgs -notcontains $_ }) }
-    }
-    return $null
-}
-# The game folder to start: the saved one when it is Steam's folder or its XVersion (DX12), else Steam's.
-function Get-SteamClient([string]$Folder, [string]$Saved) {
-    $base = [IO.Path]::GetFullPath($Folder).TrimEnd('\')
-    if ($Saved) {
-        $chosen = ''
-        try { $chosen = [IO.Path]::GetFullPath($Saved).TrimEnd('\') } catch { }
-        if (($chosen -eq $base -or $chosen -eq (Join-Path $base 'XVersion')) -and (Test-Client $chosen)) { return $chosen }
-    }
-    return $base
-}
-# The account in the Steam profile: the start of its key's SHA-256 (not the key).
-function Get-AccountId([string]$Token) {
-    if (-not $Token) { return '' }
-    $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::ASCII.GetBytes($Token))
-    return ([BitConverter]::ToString($hash) -replace '-', '').Substring(0, 16).ToLowerInvariant()
-}
-# The server a start from Steam takes without asking: -Server, the profile, else the last used one;
-# '' when none is known (then the menu asks).
-function Get-SteamServer($Settings, [string]$Given) {
-    if ($Given) { return $Given }
-    if ("$($Settings.steam.server)".Trim()) { return "$($Settings.steam.server)".Trim() }
-    $saved = @(Read-Servers $Settings)
-    if ($saved.Count) { return $saved[0].address }
-    return ''
-}
-# The account a start from Steam takes: the profile's on its server, else the most recently used one
-# ($null: a new account). Found false: the profile's account is gone (then the menu asks).
-function Get-SteamAccount($Settings, [string]$Server, $Accounts) {
-    $wanted = "$($Settings.steam.account)"
-    if ($wanted -and (Get-ServerFolderName "$($Settings.steam.server)") -eq (Get-ServerFolderName $Server)) {
-        foreach ($a in $Accounts) { if ($a.token -and (Get-AccountId $a.token) -eq $wanted) { return [pscustomobject]@{ Found = $true; Entry = $a } } }
-        return [pscustomobject]@{ Found = $false; Entry = $null }
-    }
-    $entry = $null
-    if ($Accounts.Count) { $entry = $Accounts[0] }
-    return [pscustomobject]@{ Found = $true; Entry = $entry }
-}
-
-# A minimal text VDF (KeyValues) reader that keeps where each key and block is, so an edit changes
-# only that key's text and leaves the rest of the file as it is. A block: Key, Start, Open, Close,
-# End, Children; a pair: Key, Start, Value, ValueStart, End (Children $null). Throws when damaged.
-function Read-Vdf([string]$Text) {
-    $root = [pscustomobject]@{ Key = ''; Start = 0; Open = -1; Close = $Text.Length; End = $Text.Length; Children = (New-Object Collections.ArrayList); Value = $null }
-    $stack = New-Object Collections.ArrayList
-    [void]$stack.Add($root)
-    $key = $null
-    $keyStart = 0
-    $last = 0
-    if ($Text.Length -and $Text[0] -eq [char]0xFEFF) { $last = 1 }  # a byte order mark
-    $tokens = New-Object Text.RegularExpressions.Regex('"((?:[^"\\]|\\.)*)"|//[^\n]*|\[[^\]\n]*\]|[{}]|[^\s{}"]+')
-    foreach ($m in $tokens.Matches($Text, $last)) {
-        if ($Text.Substring($last, $m.Index - $last).Trim()) { throw "unexpected text at $last" }
-        $last = $m.Index + $m.Length
-        $word = $m.Value
-        if ($word.StartsWith('//', [StringComparison]::Ordinal) -or $word[0] -eq [char]'[') { continue }  # a comment or a condition such as [$WIN32]
-        $top = $stack[$stack.Count - 1]
-        if ($word -eq '{') {
-            if ($null -eq $key) { throw "a block without a name at $($m.Index)" }
-            $node = [pscustomobject]@{ Key = $key; Start = $keyStart; Open = $m.Index; Close = -1; End = -1; Children = (New-Object Collections.ArrayList); Value = $null }
-            [void]$top.Children.Add($node)
-            [void]$stack.Add($node)
-            $key = $null
-        } elseif ($word -eq '}') {
-            if ($null -ne $key -or $stack.Count -eq 1) { throw "unexpected } at $($m.Index)" }
-            $top.Close = $m.Index
-            $top.End = $last
-            $stack.RemoveAt($stack.Count - 1)
-        } else {
-            if ($m.Groups[1].Success) {
-                $word = $m.Groups[1].Value
-                if ($word.Contains('\')) {
-                    $word = [regex]::Replace($word, '\\(.)', { param($e) switch -CaseSensitive ($e.Groups[1].Value) { 'n' { "`n" } 't' { "`t" } '\' { '\' } '"' { '"' } default { $e.Value } } })
-                }
-            }
-            if ($null -eq $key) { $key = $word; $keyStart = $m.Index }
-            else {
-                [void]$top.Children.Add([pscustomobject]@{ Key = $key; Start = $keyStart; Value = $word; ValueStart = $m.Index; End = $last; Children = $null })
-                $key = $null
-            }
-        }
-    }
-    if ($Text.Substring($last).Trim() -or $null -ne $key -or $stack.Count -ne 1) { throw 'the file ends inside a block' }
-    return $root
-}
-function Get-VdfBlock($Node, [string]$Key) {
-    foreach ($c in $Node.Children) { if ($null -ne $c.Children -and $c.Key -eq $Key) { return $c } }  # case ignored
-    return $null
-}
-function Get-VdfPair($Node, [string]$Key) {
-    foreach ($c in $Node.Children) { if ($null -eq $c.Children -and $c.Key -eq $Key) { return $c } }
-    return $null
-}
-function ConvertTo-VdfText([string]$Value) { return $Value.Replace('\', '\\').Replace('"', '\"') }
-# The game's block in a localconfig.vdf text, $null when it has none.
-function Get-VdfApp([string]$Text, [string]$App = $steamAppId) {
-    $node = Read-Vdf $Text
-    foreach ($key in @($launchPath + $App)) { if ($node) { $node = Get-VdfBlock $node $key } }
-    return $node
-}
-# The game's launch options in a localconfig.vdf text; $null when it has none.
-function Get-LaunchOptions([string]$Text, [string]$App = $steamAppId) {
-    $node = Get-VdfApp $Text $App
-    if (-not $node) { return $null }
-    $pair = Get-VdfPair $node 'LaunchOptions'
-    if ($pair) { return $pair.Value }
-    return $null
-}
-# Text with UserLocalConfigStore > Software > Valve > Steam > apps > App > LaunchOptions set to
-# Value ($null: removed); everything else stays. Missing blocks below UserLocalConfigStore are added.
-function Set-LaunchOptions([string]$Text, $Value, [string]$App = $steamAppId) {
-    $node = Read-Vdf $Text
-    $keys = @($launchPath + $App)
-    $missing = @()
-    for ($i = 0; $i -lt $keys.Count; $i++) {
-        $child = Get-VdfBlock $node $keys[$i]
-        if (-not $child) { $missing = @($keys[$i..($keys.Count - 1)]); break }
-        $node = $child
-    }
-    if (-not $missing.Count) {
-        $pair = Get-VdfPair $node 'LaunchOptions'
-        if ($pair -and $null -eq $Value) {
-            $begin = 0
-            if ($pair.Start -gt 0) { $begin = $Text.LastIndexOf([char]10, $pair.Start - 1) + 1 }
-            $finish = $Text.IndexOf([char]10, $pair.End)
-            $finish = if ($finish -lt 0) { $Text.Length } else { $finish + 1 }
-            if (-not $Text.Substring($begin, $pair.Start - $begin).Trim() -and -not $Text.Substring($pair.End, $finish - $pair.End).Trim()) {
-                return $Text.Substring(0, $begin) + $Text.Substring($finish)  # its own line
-            }
-            return $Text.Substring(0, $pair.Start) + $Text.Substring($pair.End)
-        }
-        if ($pair) { return $Text.Substring(0, $pair.ValueStart) + '"' + (ConvertTo-VdfText $Value) + '"' + $Text.Substring($pair.End) }
-    }
-    if ($null -eq $Value) { return $Text }
-    if ($missing.Count -and $missing[0] -eq $keys[0]) { throw 'no UserLocalConfigStore block' }
-    $newline = if ($Text.Contains("`r`n")) { "`r`n" } else { "`n" }
-    $close = $node.Close
-    $begin = 0
-    if ($close -gt 0) { $begin = $Text.LastIndexOf([char]10, $close - 1) + 1 }
-    $indent = [regex]::Match($Text.Substring($begin), '^[ \t]*').Value
-    if ($Text.Substring($begin, $close - $begin).Trim()) { $at = $close; $before = $newline; $after = $indent }  # "}" after other text
-    else { $at = $begin; $before = ''; $after = '' }
-    $lines = New-Object Collections.ArrayList
-    $depth = $indent + "`t"
-    foreach ($key in $missing) { [void]$lines.Add("$depth`"$(ConvertTo-VdfText $key)`""); [void]$lines.Add("$depth{"); $depth += "`t" }
-    [void]$lines.Add("$depth`"LaunchOptions`"`t`t`"$(ConvertTo-VdfText $Value)`"")
-    foreach ($key in $missing) { $depth = $depth.Substring(0, $depth.Length - 1); [void]$lines.Add("$depth}") }
-    return $Text.Substring(0, $at) + $before + ($lines -join $newline) + $newline + $after + $Text.Substring($at)
-}
-# Steam's folder: the registry's, else the usual place.
-function Get-SteamFolder {
-    foreach ($place in @(@('HKCU:\Software\Valve\Steam', 'SteamPath'), @('HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'InstallPath'), @('HKLM:\SOFTWARE\Valve\Steam', 'InstallPath'))) {
-        try {
-            $path = (Get-ItemProperty -LiteralPath $place[0] -ErrorAction Stop).($place[1])
-            if ($path -and (Test-Path -LiteralPath $path -PathType Container)) { return [IO.Path]::GetFullPath($path.Replace('/', '\')) }
-        } catch { }
-    }
-    return Join-Path ${env:ProgramFiles(x86)} 'Steam'
-}
-function Test-SteamRunning { return [bool](Get-Process -Name 'steam' -ErrorAction SilentlyContinue) }
-# The Steam users of Steam's folder with a localconfig.vdf: Id, Path, Owns (the file has the game's
-# block: the user played it), Name and Recent (from loginusers.vdf), the most recently logged in first.
-function Get-SteamUsers([string]$Steam, [string]$App = $steamAppId) {
-    $logins = @{}
-    try {
-        $users = Get-VdfBlock (Read-Vdf ([IO.File]::ReadAllText((Join-Path $Steam 'config\loginusers.vdf')))) 'users'
-        foreach ($entry in @($users.Children)) {
-            if ($null -eq $entry.Children -or $entry.Key -notmatch '^\d+$') { continue }
-            $values = @{}
-            foreach ($c in $entry.Children) { if ($null -eq $c.Children) { $values[$c.Key.ToLowerInvariant()] = $c.Value } }
-            $recent = [int64]0
-            try { $recent = [int64]$values['timestamp'] } catch { }
-            if ($values['mostrecent'] -eq '1') { $recent = [Math]::Max($recent, 1) * 2 }  # Steam's own mark of the last login
-            $logins["$([int64]$entry.Key - $steamId64Base)"] = @("$($values['personaname'])", $recent)
-        }
-    } catch { }
-    $found = @()
-    foreach ($folder in @(Get-ChildItem -LiteralPath (Join-Path $Steam 'userdata') -Directory -ErrorAction SilentlyContinue)) {
-        $path = Join-Path $folder.FullName 'config\localconfig.vdf'
-        if ($folder.Name -notmatch '^\d+$' -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
-        $owns = $false
-        try { $owns = $null -ne (Get-VdfApp ([IO.File]::ReadAllText($path)) $App) } catch { }
-        $login = $logins[$folder.Name]
-        if (-not $login) { $login = @('', [int64]0) }
-        $found += [pscustomobject]@{ Id = $folder.Name; Path = $path; Owns = $owns; Name = $login[0]; Recent = $login[1] }
-    }
-    return @($found | Sort-Object -Property Recent -Descending)
-}
-# The Steam user whose launch options to set: the only one that played the game, else asked.
-function Select-SteamUser($Users) {
-    $owners = @($Users | Where-Object { $_.Owns })
-    if (-not $owners.Count) { $owners = @($Users) }
-    if ($owners.Count -eq 1) { return $owners[0] }
-    Write-Host 'Steam user (the one you play Ring of Elysium with):'
-    return $owners[(Select-Menu @($owners | ForEach-Object { if ($_.Name) { "$($_.Name) ($($_.Id))" } else { $_.Id } }))]
-}
-# Sets the launch options in a localconfig.vdf ($null: removes them) after a backup next to it.
-# Returns the backup's path, '' when nothing changed.
-function Write-LaunchOptions([string]$Path, $Value, [string]$App = $steamAppId) {
-    $bytes = [IO.File]::ReadAllBytes($Path)
-    $utf8 = New-Object Text.UTF8Encoding($false, $true)
-    try { $text = $utf8.GetString($bytes) } catch { throw "$Path is not UTF-8 text; set the launch options in Steam yourself." }
-    try { $changed = Set-LaunchOptions $text $Value $App } catch { throw "Could not read $Path ($($_.Exception.Message)); set the launch options in Steam yourself." }
-    if ($changed -ceq $text) { return '' }
-    $backup = "$Path.$((Get-Date).ToString('yyyyMMdd-HHmmss')).roe-join.bak"
-    [IO.File]::WriteAllBytes($backup, $bytes)
-    $temp = "$Path.roe-join.tmp"
-    [IO.File]::WriteAllBytes($temp, $utf8.GetBytes($changed))
-    Move-Item -LiteralPath $temp -Destination $Path -Force
-    return $backup
-}
-# The launch option: the console form (steam-setup), with -Window the window's ("<this file>" --window %command%;
-# of the separate files join-roe-os-window.cmd).
-function Get-SteamLaunchLine([string]$Self = $env:ROE_JOIN_SELF, [switch]$Window) {
-    if ($Window) {
-        if (-not $PSBoundParameters.ContainsKey('Self')) { $Self = Get-WindowLauncher }
-        return "`"$Self`" --window %command%"
-    }
-    return "`"$Self`" %command%"
-}
-# Ours: a line naming join-roe-os.cmd, join-roe-os-window.cmd (the separate files) or join-roe-os.py, or the old
-# join.cmd or join.py (set up before the rename).
-function Test-OurLaunchOptions([string]$Launch) { return [bool]($Launch -and $Launch -match 'join(-roe-os(-window)?)?\.(cmd|py)\b') }
-# join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off]: the Steam profile and the launch
-# option line, written into Steam when the player wants (Steam closed). Steam: Get-SteamFolder's.
-function Invoke-SteamSetup($Settings, [bool]$Off, [string]$Server, [string]$Name, [string]$Steam = (Get-SteamFolder)) {
-    $line = Get-SteamLaunchLine
-    if ($Off -or -not ($Server -or $Name)) {
-        $Settings.PSObject.Properties.Remove('steam')
-        if (-not $Off) { Write-Host 'Started from Steam, join-roe-os.cmd joins the server and account you used last (-Server and -Name fix them).' }
-    } else {
-        $Server = Get-SteamServer $Settings $Server
-        if (-not $Server) { throw 'A server is needed: join-roe-os.cmd -Server <address> steam-setup' }
-        $steamProfile = [pscustomobject]@{ server = $Server; account = '' }
-        if ($Name) {
-            $entry = @(Read-Accounts (Get-AccountFolder $Server) | Where-Object { $_.token -and $_.name -eq $Name })[0]
-            if (-not $entry) { throw "No saved account named $Name for $Server. Join once with it first." }
-            $steamProfile.account = Get-AccountId $entry.token
-        }
-        $Settings | Add-Member -NotePropertyName steam -NotePropertyValue $steamProfile -Force
-        Write-Host ("Started from Steam, join-roe-os.cmd joins $Server" + $(if ($Name) { " as $Name." } else { ' with its last used account.' }))
-    }
-    $Settings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
-    $yourself = if ($Off) { 'remove the line in Steam yourself.' } else { 'paste the line into Steam yourself.' }
-    if (-not $Off) {
-        Write-Host 'Steam launch option (Ring of Elysium > Properties > General > Launch options):'
-        Write-Host "  $line"
-    }
-    $users = @(Get-SteamUsers $Steam)
-    if (-not $users.Count) { Write-Host "No Steam user folder in ${Steam}: $yourself"; return }
-    $what = if ($Off) { 'Remove it from Steam now' } else { 'Set it in Steam now' }
-    if ((Ask "$what? (y/n)" 'y') -notmatch '^[yY]') { return }
-    if (Test-SteamRunning) { throw "Steam is running: it writes its settings back when it exits, so the change would be lost. Exit Steam (Steam > Exit), then run this again. Or $yourself" }
-    $user = Select-SteamUser $users
-    $old = Get-LaunchOptions ([IO.File]::ReadAllText($user.Path))
-    if ($Off -and $null -ne $old -and -not (Test-OurLaunchOptions $old)) { Write-Host "The launch options in Steam are not ours, so they stay: $old"; return }
-    if (-not $Off -and $old -and $old -cne $line) { Write-Host "Replacing the launch options: $old" }
-    $backup = Write-LaunchOptions $user.Path $(if ($Off) { $null } else { $line })
-    if (-not $backup) { Write-Host $(if ($Off) { 'Nothing to change in Steam.' } else { 'Steam has this line already.' }); return }
-    Write-Host ("$(if ($Off) { 'Removed from' } else { 'Set in' }) Steam ($($user.Path); the old file is $(Split-Path -Leaf $backup)). Start Steam and press Play.")
-}
-
-# --- Start through Steam in the window ---------------------------------------------------------
-# The window's Set up button writes the launch option "<this file>" --window %command%: Steam then
-# opens the window (the batch part waits for it, so Steam sees the game running until it exits),
-# which joins the Steam profile's server and account. Another server or account for Steam changes
-# only the profile, not Steam.
-
-# The window started by Steam: the game in the command line after --window ($null: not by Steam).
-function Find-WindowSteamGame([string]$Text) { return Find-SteamGame (("$Text" -replace '^\s*--window(?=\s|$)', '').Trim()) }
-# What the game's launch options in Steam are for this join-roe-os.cmd (Self: its files, Get-OwnLaunchers): off (none), other (not
-# ours), window (ours, opens the window), console (ours, steam-setup's console form) or moved
-# (ours, but another copy: in another place, or the old join.cmd).
-function Get-LaunchState($Launch, [string[]]$Self = @(Get-OwnLaunchers)) {
-    if (-not "$Launch".Trim()) { return 'off' }
-    if (-not (Test-OurLaunchOptions "$Launch")) { return 'other' }
-    $words = Split-CommandLine "$Launch"
-    $path = ''
-    try { $path = [IO.Path]::GetFullPath($words[0]) } catch { }
-    $mine = @(foreach ($file in @($Self | Where-Object { $_ })) { try { [IO.Path]::GetFullPath($file) } catch { } })
-    if (-not $path -or $mine -notcontains $path) { return 'moved' }
-    if ($words -contains '--window') { return 'window' }
-    return 'console'
-}
-# The Steam users whose launch options the window sets: every one that played the game, else the
-# most recently logged in one.
-function Get-SteamTargets($Users) {
-    $owners = @($Users | Where-Object { $_.Owns })
-    if ($owners.Count) { return $owners }
-    return @($Users | Select-Object -First 1)
-}
-# Start through Steam now, for the window: State (nosteam, or the strongest of its users': window,
-# console, moved, other, off) and Options (that user's launch options).
-function Get-SteamSetupState([string]$Steam = (Get-SteamFolder), [string[]]$Self = @(Get-OwnLaunchers)) {
-    $result = [pscustomobject]@{ State = 'nosteam'; Options = '' }
-    $users = @(Get-SteamUsers $Steam)
-    if (-not $users.Count) { return $result }
-    $rank = @{ off = 0; other = 1; moved = 2; console = 3; window = 4 }
-    $result.State = 'off'
-    foreach ($user in @(Get-SteamTargets $users)) {
-        $options = $null
-        try { $options = Get-LaunchOptions ([IO.File]::ReadAllText($user.Path)) } catch { }
-        $state = Get-LaunchState $options $Self
-        if ($rank[$state] -gt $rank[$result.State]) { $result.State = $state; $result.Options = "$options" }
-    }
-    return $result
-}
-function Get-SteamExe([string]$Steam) {
-    $exe = Join-Path $Steam 'steam.exe'
-    if (Test-Path -LiteralPath $exe -PathType Leaf) { return $exe }
-    return ''
-}
-# Closes Steam as its own Exit does (steam.exe -shutdown, else steam://exit) and waits up to
-# Seconds; true once it is closed.
-function Stop-Steam([string]$Steam = (Get-SteamFolder), [int]$Seconds = 60) {
-    if (-not (Test-SteamRunning)) { return $true }
-    $exe = Get-SteamExe $Steam
-    if ($exe) { Start-Process -FilePath $exe -ArgumentList '-shutdown' } else { Start-Process -FilePath 'steam://exit' }
-    $deadline = (Get-Date).AddSeconds($Seconds)
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Milliseconds 500
-        if (-not (Test-SteamRunning)) { Start-Sleep -Milliseconds 500; return $true }
-    }
-    return $false
-}
-function Start-Steam([string]$Steam = (Get-SteamFolder)) {
-    $exe = Get-SteamExe $Steam
-    if ($exe) { Start-Process -FilePath $exe } else { Start-Process -FilePath 'steam://open/main' }
-}
-# The window's Set up (Off: Turn off) in Steam: closes Steam first when CloseSteam, then sets the
-# window's launch option for Get-SteamTargets' users (Off: removes ours). Other launch options stay
-# unless Replace: then Done is false and Other has them. Closed: Steam was closed here.
-function Invoke-SteamWrite([bool]$Off, [bool]$CloseSteam, [bool]$Replace, [string]$Steam = (Get-SteamFolder)) {
-    $result = [pscustomobject]@{ Done = $false; Other = ''; Closed = $false }
-    if ($CloseSteam -and (Test-SteamRunning)) {
-        Write-Host 'Closing Steam ...'
-        if (-not (Stop-Steam $Steam)) { throw 'Steam did not close. Close it yourself (Steam > Exit) and try again.' }
-        $result.Closed = $true
-    }
-    if (Test-SteamRunning) { throw 'Steam is open. Close it (Steam > Exit) and try again.' }
-    $users = @(Get-SteamUsers $Steam)
-    if (-not $users.Count) { throw 'Steam was not found on this PC. Start Steam and log in once, then try again.' }
-    $line = Get-SteamLaunchLine -Window
-    $changes = @()
-    foreach ($user in @(Get-SteamTargets $users)) {
-        $old = $null
-        try { $old = Get-LaunchOptions ([IO.File]::ReadAllText($user.Path)) } catch { throw "Could not read Steam's settings: $($_.Exception.Message)" }
-        $ours = Test-OurLaunchOptions "$old"
-        if ($Off) { if ($ours) { $changes += [pscustomobject]@{ User = $user; Value = $null } }; continue }
-        if ("$old".Trim() -and -not $ours -and -not $Replace) { $result.Other = "$old"; return $result }
-        $changes += [pscustomobject]@{ User = $user; Value = $line }
-    }
-    foreach ($change in $changes) { Write-LaunchOptions $change.User.Path $change.Value | Out-Null }
-    $result.Done = $true
-    return $result
-}
-# The Steam profile in roe-join.json with some values changed: server and account (Get-AccountId;
-# '' for both: the last used ones), auto_start (false: the window waits for Play).
-function Set-SteamProfile([hashtable]$Values) {
-    $settings = Read-Settings
-    $steamProfile = [ordered]@{ server = "$($settings.steam.server)"; account = "$($settings.steam.account)" }
-    if ($settings.steam -and $null -ne $settings.steam.auto_start) { $steamProfile.auto_start = [bool]$settings.steam.auto_start }
-    foreach ($key in @($Values.Keys)) { $steamProfile[$key] = $Values[$key] }
-    $settings | Add-Member -NotePropertyName steam -NotePropertyValue ([pscustomobject]$steamProfile) -Force
-    $settings | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
-}
-# Whether the window started by Steam joins at once (the default) or waits for Play.
-function Test-SteamAutoStart($Settings) { return -not ($Settings.steam -and $Settings.steam.auto_start -eq $false) }
-# Where Steam's Play button joins, in words: "on <server> as <name>".
-function Get-SteamProfileText($Settings) {
-    $server = "$($Settings.steam.server)".Trim()
-    if (-not $server) { return 'on the server and with the account you used last' }
-    $wanted = "$($Settings.steam.account)"
-    if (-not $wanted) { return "on $server with the account you used last there" }
-    foreach ($a in (Read-Accounts (Get-AccountFolder $server))) {
-        if ($a.token -and (Get-AccountId $a.token) -eq $wanted) { return "on $server as $($a.name)" }
-    }
-    return "on $server, but its account is gone: choose one and press the button again"
-}
-# The window's line about Start through Steam (State from Get-SteamSetupState): Text and Level.
-function Get-GuiSteamText([string]$State, $Settings) {
-    switch ($State) {
-        'window' { return [pscustomobject]@{ Text = "On: Steam's Play button starts the game $(Get-SteamProfileText $Settings)."; Level = 'info' } }
-        'console' { return [pscustomobject]@{ Text = 'On, with a console window instead of this one. Press Set up to get this window.'; Level = 'warn' } }
-        'moved' { return [pscustomobject]@{ Text = 'On, but for another copy (another folder, or the old join.cmd). Press Set up to use this one.'; Level = 'warn' } }
-        'other' { return [pscustomobject]@{ Text = 'Off. Steam has other launch options for Ring of Elysium; Set up asks before it replaces them.'; Level = 'muted' } }
-        'nosteam' { return [pscustomobject]@{ Text = 'Off. Steam was not found on this PC.'; Level = 'muted' } }
-        'off' { return [pscustomobject]@{ Text = 'Off.'; Level = 'muted' } }
-    }
-    return [pscustomobject]@{ Text = 'Checking Steam ...'; Level = 'muted' }
-}
-# The line while the window started by Steam counts down.
-function Get-SteamCountdownText([int]$Seconds, [string]$Server, [string]$Account) {
-    $who = if ($Account) { " as $Account" } else { ' with a new account' }
-    return "Started by Steam: the game starts in $Seconds s on $Server$who."
 }
 
 # === The window ===============================================================================
@@ -2203,10 +1744,9 @@ function Test-ShowAdmin($Roles, $Entry) {
     return [bool]($Roles -and $Entry -and $Entry.token -and ($Roles[$Entry.token] -eq 'gm' -or $Roles[$Entry.token] -eq 'admin'))
 }
 # Play: the same steps as the console's main part, with the window's answers. Token and AccountName:
-# the saved account (New: a new one); UseVoice false: no voice chat this time; Extra: started by
-# Steam, what follows Steam's own arguments. Returns once the game has exited and the original
-# voice DLL is back.
-function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [string]$AccountName, [bool]$New, [bool]$UseVoice, [string[]]$Extra = @()) {
+# the saved account (New: a new one); UseVoice false: no voice chat this time. Returns once the
+# game has exited and the original voice DLL is back.
+function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [string]$AccountName, [bool]$New, [bool]$UseVoice) {
     $settings = Read-Settings
     $client = Get-GameFolder $Client
     Confirm-GameFiles $client $false
@@ -2250,7 +1790,7 @@ function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [strin
         try { $stats = Get-ServerStats $serverIp $folder } catch { }
         if ($info -match '^OK ') { Send-GuiEvent 'stats' ((Format-ServerNow $info $stats) -replace ' \| ', "`n") }
     }
-    $game = Start-Game $client $login.Uid $serverIp $voicePick @($Extra)
+    $game = Start-Game $client $login.Uid $serverIp $voicePick
     Send-GuiEvent 'game' $true
     try {
         # While the game runs: the server's numbers every 30 s.
@@ -2368,40 +1908,11 @@ function Get-GuiXaml {
       </StackPanel>
     </DockPanel>
     <TextBlock x:Name="VoiceNote" Margin="0,4,0,0" TextWrapping="Wrap"/>
-    <Border x:Name="SteamBar" Margin="0,14,0,0" Padding="8,6" BorderThickness="1" BorderBrush="#FF7A9CC6" Background="#FFEAF2FB" Visibility="Collapsed">
-      <DockPanel>
-        <Button x:Name="SteamCancelButton" DockPanel.Dock="Right" Margin="8,0,0,0" Content="Cancel" Visibility="Collapsed"/>
-        <TextBlock x:Name="SteamBarText" VerticalAlignment="Center" TextWrapping="Wrap"/>
-      </DockPanel>
-    </Border>
     <Button x:Name="PlayButton" Margin="0,16,0,0" Height="50" FontSize="20" FontWeight="Bold" Content="Play"/>
     <TextBlock x:Name="StatusText" Margin="0,10,0,0" TextWrapping="Wrap" MinHeight="20"/>
     <ToggleButton x:Name="DetailsButton" Margin="0,6,0,0" HorizontalAlignment="Left" Padding="10,2" Content="Details"/>
     <TextBox x:Name="DetailsBox" Margin="0,6,0,0" Height="170" IsReadOnly="True" TextWrapping="Wrap"
              VerticalScrollBarVisibility="Auto" FontFamily="Consolas" Visibility="Collapsed"/>
-    <Expander x:Name="SteamSetupBox" Margin="0,12,0,0" Header="Set up starting through Steam" IsExpanded="False">
-      <StackPanel Margin="0,6,0,0">
-        <TextBlock TextWrapping="Wrap" Text="With this, Steam's Play button starts the game on this server with your account, with the Steam overlay and playtime. It opens this window, which joins and closes itself when the game exits."/>
-        <TextBlock Margin="0,8,0,0" FontWeight="Bold" Text="By hand"/>
-        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="In Steam: Ring of Elysium > Properties > General > Launch options, paste this line. Steam's Play then joins the server and account you used last."/>
-        <DockPanel Margin="0,4,0,0">
-          <Button x:Name="SteamCopyButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Copy"/>
-          <TextBox x:Name="SteamLineBox" IsReadOnly="True" FontFamily="Consolas" VerticalContentAlignment="Center"/>
-        </DockPanel>
-        <TextBlock Margin="0,10,0,0" FontWeight="Bold" Text="Automatic"/>
-        <TextBlock Margin="0,2,0,0" TextWrapping="Wrap" Text="Set up puts the line into Steam for you, with the server and account selected above. Steam has to be closed for this: join-roe-os.cmd asks, closes it and can start it again."/>
-        <TextBlock x:Name="SteamText" Margin="0,4,0,0" TextWrapping="Wrap"/>
-        <WrapPanel Margin="0,6,0,0">
-          <Button x:Name="SteamSetButton" Margin="0,0,6,6" Content="Set up Start through Steam"/>
-          <Button x:Name="SteamOffButton" Margin="0,0,6,6" Content="Turn it off" Visibility="Collapsed"/>
-        </WrapPanel>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-          <CheckBox x:Name="SteamAutoBox" VerticalAlignment="Center" AutomationProperties.Name="When Steam starts the game, join at once (3 seconds to cancel)"/>
-          <TextBlock x:Name="SteamAutoLabel" Style="{StaticResource CheckLabel}" Text="When Steam starts the game, join at once (3 seconds to cancel)"
-                     IsEnabled="{Binding IsEnabled, ElementName=SteamAutoBox}"/>
-        </StackPanel>
-      </StackPanel>
-    </Expander>
     <Expander x:Name="AdvancedBox" Margin="0,12,0,0" Header="Advanced">
       <StackPanel Margin="0,6,0,0">
         <TextBlock x:Name="FirewallText" TextWrapping="Wrap"/>
@@ -2432,8 +1943,7 @@ function Get-GuiXaml {
 function Get-GuiControlNames {
     return @('ServerBox', 'AddServerButton', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'Dx12Box', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
         'PlayButton', 'StatusText', 'DetailsButton', 'DetailsBox', 'AdvancedBox', 'FirewallText', 'FirewallOnButton', 'FirewallOffButton', 'FirewallResetButton',
-        'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton', 'SteamBar', 'SteamBarText', 'SteamCancelButton', 'SteamText',
-        'SteamSetButton', 'SteamOffButton', 'SteamAutoBox', 'SteamSetupBox', 'SteamLineBox', 'SteamCopyButton', 'VoiceLabel', 'SteamAutoLabel')
+        'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton', 'VoiceLabel')
 }
 function Get-InputXaml {
     return @'
@@ -2636,8 +2146,6 @@ function Update-Controls {
             'FirewallResetButton', 'FirewallShowButton', 'ExportButton', 'ImportButton')) { $gui.C[$name].IsEnabled = -not $playing }
     # The admin page also while the game runs: it has a worker of its own (Start-SideWork).
     $gui.C.AdminButton.IsEnabled = -not $gui.SideJob
-    # Start through Steam may close Steam: not while joining or playing, not twice at once.
-    foreach ($name in @('SteamSetButton', 'SteamOffButton')) { $gui.C[$name].IsEnabled = -not $playing -and -not $gui.SteamBusy }
     $gui.C.PlayButton.IsEnabled = -not $playing
     $gui.C.PlayButton.Content = if ($gui.GameRunning) { 'Game running' } elseif ($playing) { 'Joining...' } else { 'Play' }
 }
@@ -2833,7 +2341,6 @@ function Add-GuiServer {
     Request-ServerInfo
 }
 function Start-Play {
-    if ($gui.CountdownTimer) { Stop-SteamCountdown '' }
     $server = Get-SelectedServer
     if (-not $server) { Add-Line 'Add the server first: Add server...' 'error'; return }
     if (-not (Test-Client $gui.Client)) {
@@ -2861,157 +2368,16 @@ function Start-Play {
     $entry = Get-SelectedAccount
     $gui.Playing = $true
     Add-Line "Joining $server ..."
-    $extra = [string[]]@()
-    if ($gui.SteamGame) {
-        $extra = [string[]]@($gui.SteamGame.Extra)
-        Set-Text $gui.C.SteamBarText 'Started by Steam: this window closes itself when the game exits.'
-    }
-    Start-Work 'Invoke-PlayJob' @{ Client = $gui.Client; Server = $server; Token = "$($entry.token)"; AccountName = "$($entry.name)"; New = ($null -eq $entry); UseVoice = $useVoice; Extra = $extra } {
+    Start-Work 'Invoke-PlayJob' @{ Client = $gui.Client; Server = $server; Token = "$($entry.token)"; AccountName = "$($entry.name)"; New = ($null -eq $entry); UseVoice = $useVoice } {
         param($done)
         $gui.Playing = $false
         $gui.GameRunning = $false
-        # Started by Steam: the window goes with the game, so Steam's "Playing" ends too.
-        if ($done.Ok -and $gui.SteamGame) { Write-GuiLog 'The game has exited (started by Steam): closing the window.'; $gui.Window.Close(); return }
-        if ($gui.SteamGame) { Set-Text $gui.C.SteamBarText 'Started by Steam: press Play to try again.' }
         if ($done.Ok) { Add-Line 'The game has exited.' } else { Add-Line "Could not join: $($done.Message)" 'error' }
         Update-ServerList (Get-SelectedServer)
         Update-FirewallText
         Update-Voice
     }
 }
-# --- Start through Steam -----------------------------------------------------------------------
-# Set up starting through Steam: the launch option line to paste (Copy), the state in Steam
-# (checked in the worker), Set up (the selected server and account as the Steam profile, and the
-# launch option in Steam), Turn off.
-function Update-SteamPanel {
-    $settings = Read-Settings
-    $gui.C.SteamLineBox.Text = Get-SteamLaunchLine -Window
-    $state = "$($gui.SteamState)"
-    $line = Get-GuiSteamText $state $settings
-    Set-Text $gui.C.SteamText $line.Text $line.Level
-    $gui.C.SteamSetButton.Content = if ($state -eq 'window') { 'Use the selected server and account' } else { 'Set up Start through Steam' }
-    $gui.C.SteamOffButton.Visibility = if ($state -in @('window', 'console', 'moved')) { 'Visible' } else { 'Collapsed' }
-    $gui.Updating = $true
-    try { $gui.C.SteamAutoBox.IsChecked = Test-SteamAutoStart $settings } finally { $gui.Updating = $false }
-}
-# Copy: the launch option line to the clipboard (the window runs in STA).
-function Set-GuiClipboard([string]$Text) { [Windows.Clipboard]::SetText($Text) }
-function Copy-SteamLine {
-    $line = Get-SteamLaunchLine -Window
-    try { Set-GuiClipboard $line; Add-Line "Copied: $line. Paste it into Steam's launch options." }
-    catch { Add-Line "Could not copy ($(Get-ErrorMessage $_)): select the line and press Ctrl+C." 'warn' }
-}
-function Request-SteamState {
-    Start-Work 'Get-SteamSetupState' @{} {
-        param($done)
-        $gui.SteamState = if ($done.Ok) { $done.Result.State } else { 'nosteam' }
-        Update-SteamPanel
-    }
-}
-function Set-GuiSteam([bool]$Off) {
-    $state = "$($gui.SteamState)"
-    if (-not $state) { Add-Line 'Still checking Steam: try again in a moment.' 'warn'; return }
-    if (-not $Off) {
-        $server = Get-SelectedServer
-        if (-not $server) { Add-Line 'Add the server first: Add server...' 'error'; return }
-        $entry = Get-SelectedAccount
-        Set-SteamProfile @{ server = $server; account = $(if ($entry -and $entry.token) { Get-AccountId "$($entry.token)" } else { '' }) }
-        # Already on: only the server and account change, Steam stays as it is.
-        if ($state -eq 'window') {
-            Update-SteamPanel
-            Add-Line "Start through Steam: Steam's Play button now starts the game $(Get-SteamProfileText (Read-Settings))."
-            return
-        }
-    }
-    $close = $false
-    if (Test-SteamRunning) {
-        $what = if ($Off) { 'turn Start through Steam off' } else { 'set up Start through Steam' }
-        $answer = Show-Message ("Steam has to be closed to $what (it saves its own settings when it closes and would undo the change).`n`n" +
-            'Close Steam now? join-roe-os.cmd can start it again afterwards.') 'YesNo' 'Question' 'Yes'
-        if ($answer -ne 'Yes') { Add-Line 'Start through Steam: nothing changed (Steam stays open).' 'warn'; return }
-        $close = $true
-    }
-    Start-GuiSteamWrite $Off $close $false
-}
-function Start-GuiSteamWrite([bool]$Off, [bool]$Close, [bool]$Replace) {
-    $gui.SteamBusy = $true
-    $gui.SteamOff = $Off
-    Start-Work 'Invoke-SteamWrite' @{ Off = $Off; CloseSteam = $Close; Replace = $Replace } { param($done) Complete-GuiSteamWrite $done }
-}
-function Complete-GuiSteamWrite($Done) {
-    $gui.SteamBusy = $false
-    if (-not $Done.Ok) { Add-Line "Start through Steam: $($Done.Message)" 'error' }
-    else {
-        if ($Done.Result.Closed) { $gui.SteamClosed = $true }
-        if (-not $Done.Result.Done) {
-            $answer = Show-Message ("Steam has other launch options for Ring of Elysium:`n`n$($Done.Result.Other)`n`nReplace them?") 'YesNo' 'Question' 'No'
-            if ($answer -eq 'Yes') { Start-GuiSteamWrite $false $false $true; return }
-            Add-Line 'Start through Steam: nothing changed (Steam keeps its launch options).' 'warn'
-        } elseif ($gui.SteamOff) {
-            Set-SteamProfile @{ server = ''; account = '' }
-            Add-Line "Start through Steam is off: Steam's Play button starts the game as before."
-        } else {
-            Add-Line "Start through Steam is on: Steam's Play button starts the game $(Get-SteamProfileText (Read-Settings))."
-        }
-    }
-    if ($gui.SteamClosed) {
-        $gui.SteamClosed = $false
-        if ((Show-Message 'Start Steam again?' 'YesNo' 'Question' 'Yes') -eq 'Yes') {
-            try { Start-Steam } catch { Add-Line "Could not start Steam: $(Get-ErrorMessage $_)" 'error' }
-        }
-    }
-    $gui.SteamState = ''
-    Update-SteamPanel
-    Request-SteamState
-}
-# Started by Steam: the window with the Steam profile's server and account (else the last used
-# ones) and Steam's game folder; then the countdown, or a wait for Play.
-function Initialize-SteamStart($Settings) {
-    $client = Get-SteamClient $gui.SteamGame.Folder "$($Settings.client)"
-    $split = Split-GameFolder $client
-    $gui.GameBase = $split.Base
-    $gui.Dx12 = $split.Dx12
-    Update-GameFolder
-    $server = Get-SteamServer $Settings ''
-    Update-ServerList $server
-    $gui.Window.Title = 'Ring of Elysium 2022: started by Steam'
-    $gui.C.SteamBar.Visibility = 'Visible'
-    if (-not (Get-SelectedServer)) { Set-Text $gui.C.SteamBarText 'Started by Steam: add the server, then press Play.' 'warn'; return }
-    $pick = Get-SteamAccount $Settings (Get-SelectedServer) $gui.Accounts
-    if (-not $pick.Found) { Set-Text $gui.C.SteamBarText 'Started by Steam: the account saved for Steam is gone. Choose one and press Play.' 'warn'; return }
-    $index = if ($pick.Entry) { [array]::IndexOf(@($gui.Accounts), $pick.Entry) } else { @($gui.Accounts).Count }
-    if ($index -ge 0) { $gui.C.AccountBox.SelectedIndex = $index }
-    if (-not $gui.Client) { Set-Text $gui.C.SteamBarText 'Started by Steam: the game folder has a problem (see above), so press Play once it is fixed.' 'warn'; return }
-    if (-not (Test-SteamAutoStart $Settings)) { Set-Text $gui.C.SteamBarText 'Started by Steam: press Play when you are ready.'; return }
-    Start-SteamCountdown 3
-}
-function Start-SteamCountdown([int]$Seconds) {
-    $gui.Countdown = $Seconds
-    $gui.C.SteamCancelButton.Visibility = 'Visible'
-    Show-SteamCountdown
-    $timer = New-Object Windows.Threading.DispatcherTimer
-    $timer.Interval = [TimeSpan]::FromSeconds(1)
-    $timer.Add_Tick({ try { Step-SteamCountdown } catch { Show-GuiError $_ } })
-    $gui.CountdownTimer = $timer
-    $timer.Start()
-}
-function Show-SteamCountdown {
-    $entry = Get-SelectedAccount
-    Set-Text $gui.C.SteamBarText (Get-SteamCountdownText $gui.Countdown (Get-SelectedServer) "$($entry.name)")
-}
-function Step-SteamCountdown {
-    $gui.Countdown--
-    if ($gui.Countdown -gt 0) { Show-SteamCountdown; return }
-    Stop-SteamCountdown ''
-    if (-not $gui.Playing) { Start-Play }
-}
-# Text: the bar's new line ('' keeps it).
-function Stop-SteamCountdown([string]$Text) {
-    if ($gui.CountdownTimer) { $gui.CountdownTimer.Stop(); $gui.CountdownTimer = $null }
-    $gui.C.SteamCancelButton.Visibility = 'Collapsed'
-    if ($Text) { Set-Text $gui.C.SteamBarText $Text }
-}
-
 function Set-GuiFirewall([string]$Action) {
     $client = if (Test-Client $gui.Client) { $gui.Client } else { '' }
     switch ($Action) {
@@ -3071,48 +2437,6 @@ function Open-GuiLog {
 function Add-Handler($Control, [string]$Event, [scriptblock]$Action) {
     $Control."Add_$Event"({ try { & $Action } catch { Show-GuiError $_ } }.GetNewClosure())
 }
-# The buttons and the box of "Set up starting through Steam".
-function Register-SteamHandlers {
-    Add-Handler $gui.C.SteamCopyButton 'Click' { Copy-SteamLine }
-    Add-Handler $gui.C.SteamSetButton 'Click' { Set-GuiSteam $false }
-    Add-Handler $gui.C.SteamOffButton 'Click' { Set-GuiSteam $true }
-    Add-Handler $gui.C.SteamAutoBox 'Click' { if (-not $gui.Updating) { Set-SteamProfile @{ auto_start = [bool]$gui.C.SteamAutoBox.IsChecked } } }
-}
-# The console the window was started from out of sight: cmd.exe's when Steam starts join-roe-os.cmd and
-# it waits for the window, PowerShell's own after a double-click. A classic console window is
-# hidden. Windows Terminal (the default terminal on Windows 11) only minimizes for that, so there
-# its window is hidden when it holds just this tab; it closes when the tab ends.
-function Hide-ConsoleWindow {
-    try {
-        if (-not ('RoeJoin.ConsoleWindow' -as [type])) {
-            Add-Type -Namespace RoeJoin -Name ConsoleWindow -MemberDefinition @'
-[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
-[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
-[DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr window, uint relation);
-[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr window, System.Text.StringBuilder name, int size);
-'@
-        }
-        $console = [RoeJoin.ConsoleWindow]::GetConsoleWindow()
-        if ($console -eq [IntPtr]::Zero) { return }
-        $window = $console
-        $class = New-Object Text.StringBuilder 256
-        [void][RoeJoin.ConsoleWindow]::GetClassName($console, $class, 256)
-        if ("$class" -eq 'PseudoConsoleWindow') {
-            $terminal = [RoeJoin.ConsoleWindow]::GetWindow($console, 4)  # GW_OWNER: the terminal's window
-            $class = New-Object Text.StringBuilder 256
-            [void][RoeJoin.ConsoleWindow]::GetClassName($terminal, $class, 256)
-            if ("$class" -eq 'CASCADIA_HOSTING_WINDOW_CLASS') {
-                Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-                $tab = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::TabItem)
-                $tabs = [Windows.Automation.AutomationElement]::FromHandle($terminal).FindAll([Windows.Automation.TreeScope]::Descendants, $tab).Count
-                if ($tabs -eq 1) { $window = $terminal }
-            }
-        }
-        [void][RoeJoin.ConsoleWindow]::ShowWindow($window, 0)  # SW_HIDE
-    } catch {
-        Write-GuiLog "join-roe-os.cmd could not hide its console window: $($_.Exception.Message)"
-    }
-}
 function Start-Gui([string]$Code) {
     $log = Get-GuiLogPath
     if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination ($log -replace '\.log$', '.old.log') -Force }
@@ -3126,9 +2450,6 @@ function Start-Gui([string]$Code) {
     $gui.Job = $null; $gui.Playing = $false; $gui.GameRunning = $false; $gui.Updating = $false; $gui.Draining = $false
     $gui.SideJob = $null; $gui.SideWorker = $null; $gui.Code = $Code
     $gui.Roles = $null; $gui.RolesServer = ''
-    $gui.SteamState = ''; $gui.SteamBusy = $false; $gui.SteamClosed = $false; $gui.SteamOff = $false; $gui.CountdownTimer = $null
-    # Started by Steam (launch option "<join-roe-os.cmd>" --window %command%): its command line follows --window.
-    $gui.SteamGame = Find-WindowSteamGame "$env:ROE_JOIN_ARGS"
 
     $gui.Worker = New-Worker $Code
 
@@ -3143,10 +2464,8 @@ function Start-Gui([string]$Code) {
     $gui.Dx12 = $split.Dx12
     Update-GameFolder
     Update-ServerList ''
-    if ($gui.SteamGame) { Initialize-SteamStart $settings }
     Update-Voice
     Update-FirewallText
-    Update-SteamPanel
     Update-Controls
     Set-Text $gui.C.StatusText 'Choose the server and the account, then Play.' 'muted'
 
@@ -3168,8 +2487,6 @@ function Start-Gui([string]$Code) {
     Add-Handler $gui.C.ExportButton 'Click' { Export-GuiAccounts }
     Add-Handler $gui.C.ImportButton 'Click' { Import-GuiAccounts }
     Add-Handler $gui.C.LogButton 'Click' { Open-GuiLog }
-    Register-SteamHandlers
-    Add-Handler $gui.C.SteamCancelButton 'Click' { Stop-SteamCountdown 'Started by Steam: press Play when you are ready.' }
     $window.Add_Closing({
         param($sender, $e)
         if (-not $gui.Playing) { return }
@@ -3184,7 +2501,6 @@ function Start-Gui([string]$Code) {
     # Our voice DLL left by a crash or a closed window: the original back first.
     Start-Work 'Restore-AllVoice' @{} $null
     Request-ServerInfo
-    Request-SteamState
     [void]$window.ShowDialog()
     $timer.Stop()
     Write-GuiLog 'join-roe-os.cmd closed its window.'
@@ -3196,7 +2512,6 @@ if ($FirewallStep) { exit (Invoke-FirewallStep $FirewallStep) }
 if (-not $env:ROE_JOIN_SELF -and (Split-Path -Leaf "$PSCommandPath") -eq 'join-roe-os.ps1') {
     $env:ROE_JOIN_CODE = $PSCommandPath
     $env:ROE_JOIN_SELF = Join-Path (Split-Path -Parent $PSCommandPath) 'join-roe-os.cmd'
-    $env:ROE_JOIN_STEAM = Join-Path (Split-Path -Parent $PSCommandPath) 'join-roe-os-window.cmd'
 }
 # The .ps1 copies the batch part writes (run-*.ps1), once PowerShell has read them.
 Get-ChildItem -LiteralPath (Join-Path $env:APPDATA 'roe-join') -Filter 'run-*.ps1' -ErrorAction SilentlyContinue |
@@ -3204,7 +2519,6 @@ Get-ChildItem -LiteralPath (Join-Path $env:APPDATA 'roe-join') -Filter 'run-*.ps
 # The window (ROE_JOIN_WINDOW from the batch part: no arguments, or --window).
 if ($env:ROE_JOIN_WINDOW) {
     try {
-        Hide-ConsoleWindow
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms
         if (-not $env:ROE_JOIN_SELF) { throw 'Start join-roe-os.cmd by double-clicking it.' }
         $sync = [hashtable]::Synchronized(@{ Events = New-Object 'System.Collections.Concurrent.ConcurrentQueue[object]' })
@@ -3231,13 +2545,8 @@ try {
     # --skip-file-check: no check of the game files (for players who changed them on purpose).
     $skipFileCheck = $argText -match '(^|\s)--skip-file-check(?=\s|$)'
     $argText = ($argText -replace '(^|\s)--skip-file-check(?=\s|$)', ' ').Trim()
-    # Started by Steam ("<join-roe-os.cmd>" %command%): the command line names the game's exe; our options
-    # are the ones in front of it.
-    $steamGame = Find-SteamGame $argText
-    if ($steamGame) { $argText = $steamGame.Before.Trim() }
     $usage = ('Usage: join-roe-os.cmd [--console] [--skip-file-check] [-Server <address>] [-Name <name>] | firewall [on|off|reset] | voice [on|off] | export [FILE] | import FILE' + "`n" +
         'For GM accounts: join-roe-os.cmd [-Server <address>] [-Name <name>] admin (opens the server''s admin page)' + "`n" +
-        'Start through Steam: join-roe-os.cmd [-Server <address>] [-Name <name>] steam-setup [off] (the launch option line, set in Steam if you want)' + "`n" +
         'The window: join-roe-os.cmd without arguments, or join-roe-os.cmd --window')
     $arguments = Read-Arguments $argText
     # Ours left by a crash or a closed window: the original back first. Not for "admin", which
@@ -3249,12 +2558,7 @@ try {
     if ($argText -match '(^|\s)-Name(\s|$)' -and (-not $givenName -or $givenName.Length -gt 24 -or $givenName -match '[\x00-\x1f]')) {
         throw 'The name must be 1 to 24 characters without control characters.'
     }
-    if ($command -and $command -ne 'admin' -and $command -notmatch '^steam-setup\b' -and ($givenName -or $givenServer)) { throw $usage }
-    if ($steamGame -and $command) { throw $usage }
-    if ($command -match '^steam-setup(\s+(on|off))?$') {
-        Invoke-SteamSetup $settings ("$($Matches[2])" -eq 'off') $givenServer $givenName
-        exit 0
-    }
+    if ($command -and $command -ne 'admin' -and ($givenName -or $givenServer)) { throw $usage }
     if ($command -match '^voice(\s+(on|off))?$') {
         $set = $Matches[2]
         if ($set) {
@@ -3331,26 +2635,21 @@ try {
         Write-Host 'Firewall rules off: join-roe-os.cmd no longer creates them (the game can reach the internet).'
         exit 0
     }
-    Write-Host ('Ring of Elysium 2022: join a server' + $(if ($steamGame) { ' (started by Steam)' } else { '' }))
+    Write-Host 'Ring of Elysium 2022: join a server'
     Write-Host ''
 
     # 1. The game.
     # Always asked (Enter keeps the last one): a second game folder, for example XVersion,
-    # lets a second player join from the same PC. Started by Steam: Steam's folder.
-    if ($steamGame) {
-        $client = Get-GameFolder (Get-SteamClient $steamGame.Folder "$($settings.client)")
-    } else {
-        $guess = $settings.client
-        if (-not (Test-Client $guess)) { $guess = 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' }
-        if (-not (Test-Client $guess)) { $guess = '' }
-        $client = Get-GameFolder (Ask 'Game folder (the one with Europa_Client.exe)' $guess)
-    }
+    # lets a second player join from the same PC.
+    $guess = $settings.client
+    if (-not (Test-Client $guess)) { $guess = 'C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium' }
+    if (-not (Test-Client $guess)) { $guess = '' }
+    $client = Get-GameFolder (Ask 'Game folder (the one with Europa_Client.exe)' $guess)
     Confirm-GameFiles $client $skipFileCheck
 
     # 2. Server and name.
     $serverList = @(Get-OfferedServers $settings)
-    $given = if ($steamGame) { Get-SteamServer $settings $givenServer } else { $givenServer }
-    $server = "$(Select-Server $serverList $given)".Trim()
+    $server = "$(Select-Server $serverList $givenServer)".Trim()
     if (-not $server) { throw 'A server address is needed.' }
     $hostName = Get-ServerHost $server
     $firewall = $settings.firewall
@@ -3397,13 +2696,7 @@ try {
     # 4. Log in.
     $accountList = Read-Accounts $folder
     if ($accountList.Count -and -not $givenName -and (Update-AccountNames $serverIp $folder $accountList)) { Save-Accounts $folder $accountList | Out-Null }
-    if ($steamGame -and -not $givenName) {
-        $steamPick = Get-SteamAccount $settings $server $accountList
-        if (-not $steamPick.Found) { Write-Host 'The account join-roe-os.cmd steam-setup saved for Steam starts is no longer there. Choose one:' }
-        $entry = if ($steamPick.Found) { $steamPick.Entry } else { Select-Account $accountList '' }
-    } else {
-        $entry = Select-Account $accountList $givenName
-    }
+    $entry = Select-Account $accountList $givenName
     $login = Connect-Account $serverIp $folder $accountList $entry $givenName
     Save-Settings
     if ($login.Accounts) {
@@ -3414,10 +2707,8 @@ try {
         if ($info -match '^OK ') { Write-Host (Format-ServerNow $info $stats) }
     }
 
-    # 5. The game (started by Steam: with what the player wrote after %command%).
-    $extra = @()
-    if ($steamGame) { $extra = @($steamGame.Extra) }
-    $game = Start-Game $client $login.Uid $serverIp $voicePick $extra
+    # 5. The game.
+    $game = Start-Game $client $login.Uid $serverIp $voicePick
     try {
         # While the game runs: the server's numbers every 30 s, in the window title and on one line
         # here that is written over each time.

@@ -5,33 +5,20 @@ setlocal DisableDelayedExpansion
 set "ROE_JOIN_SELF=%~f0"
 set "ROE_JOIN_ARGS=%*"
 set "ROE_JOIN_WINDOW="
-set "ROE_JOIN_WAIT="
 rem The PowerShell code is join-roe-os.ps1 next to this file. Bypass: a downloaded .ps1 has the
-rem download's mark, which RemoteSigned refuses. The window's Steam launch option names
-rem join-roe-os-window.cmd.
+rem download's mark, which RemoteSigned refuses.
 set "ROE_JOIN_PS1=%~dp0join-roe-os.ps1"
 set "ROE_JOIN_CODE=%~dp0join-roe-os.ps1"
-set "ROE_JOIN_STEAM=%~dp0join-roe-os-window.cmd"
 if not exist "%ROE_JOIN_PS1%" goto :no_script
 setlocal EnableDelayedExpansion
 rem The window: no arguments and not typed in a command prompt (a double-click, a shortcut and
 rem PowerShell run cmd.exe /c "...join-roe-os.cmd"; the cmd.exe of a prompt has no /c), or --window.
 rem A copy of cmdcmdline: the dynamic variable itself takes no :old=new.
-rem --window with more after it (Steam's launch option "<join-roe-os.cmd>" --window %command%): the window
-rem with that command line, and this waits for it, so Steam sees the game running until it exits.
-rem The window hides this console itself.
 set "ROE_JOIN_LINE=!cmdcmdline!"
 if not defined ROE_JOIN_ARGS (
   if /i not "!ROE_JOIN_LINE: /c=!"=="!ROE_JOIN_LINE!" set "ROE_JOIN_WINDOW=1"
 ) else if /i "!ROE_JOIN_ARGS!"=="--window" (
   set "ROE_JOIN_WINDOW=1"
-) else if /i "!ROE_JOIN_ARGS:~0,9!"=="--window " (
-  set "ROE_JOIN_WINDOW=1"
-  set "ROE_JOIN_WAIT=1"
-)
-if defined ROE_JOIN_WAIT (
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "!ROE_JOIN_PS1!"
-  exit /b 0
 )
 if defined ROE_JOIN_WINDOW (
   start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -File "!ROE_JOIN_PS1!"
@@ -45,7 +32,7 @@ if not "!ROE_JOIN_EXIT!"=="0" (
 )
 exit /b !ROE_JOIN_EXIT!
 :no_script
-echo join-roe-os.ps1 is missing next to join-roe-os.cmd ("%~dp0"). Download join-roe-os.ps1,
-echo join-roe-os.cmd and join-roe-os-window.cmd of separate-files into one folder.
+echo join-roe-os.ps1 is missing next to join-roe-os.cmd ("%~dp0"). Download join-roe-os.ps1 and
+echo join-roe-os.cmd of separate-files into one folder.
 pause
 exit /b 1

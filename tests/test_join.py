@@ -1128,13 +1128,13 @@ class JoinGui(unittest.TestCase):
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 54)
+        run_powershell(self, 'join_gui.ps1', prepare, 42)
 
     def test_separate_files(self):
         """The same window from separate-files/join-roe-os.ps1."""
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 54, SEPARATE / 'join-roe-os.ps1')
+        run_powershell(self, 'join_gui.ps1', prepare, 42, SEPARATE / 'join-roe-os.ps1')
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
@@ -1161,10 +1161,9 @@ class JoinCmdStart(unittest.TestCase):
         """Writes the batch part with its PowerShell starts printing what they would start; checks the modes."""
         batch = batch.replace('\r\n', '\n')
         window = 'start "" /min powershell.exe '
-        wait = '\n  powershell.exe '
         console = '\npowershell.exe '
-        self.assertEqual((batch.count(window), batch.count(wait), batch.count(console)), (1, 1, 1))
-        batch = batch.replace(window, 'echo MODE window & rem ').replace(wait, '\n  echo MODE window-wait [!ROE_JOIN_ARGS!] & rem ')
+        self.assertEqual((batch.count(window), batch.count('\n  powershell.exe '), batch.count(console)), (1, 0, 1))
+        batch = batch.replace(window, 'echo MODE window & rem ')
         batch = batch.replace(console, '\necho MODE console [%ROE_JOIN_ARGS%] & rem ')
         (base / name).write_text(batch.replace('\n', '\r\n'), newline='')
         path = subprocess.run(['wslpath', '-w', str(base / name)], capture_output=True, text=True, check=True).stdout.strip()
@@ -1178,11 +1177,8 @@ class JoinCmdStart(unittest.TestCase):
         self.assertEqual(self.run_batch(base, f'"{path}"'), ['MODE console []'])
         self.assertEqual(self.run_batch(base, f'"{path}" export'), ['MODE console [export]'])
         self.assertEqual(self.run_batch(base, f'"{path}" --window'), ['MODE window'])
-        # Started by Steam ("<join-roe-os.cmd>" %command%): Windows runs a .cmd as cmd /c "<the line>".
-        steam = r'"C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\SLauncher.exe" -steam -maintenance'
-        self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" {steam}"'), [f'MODE console [{steam}]'])
-        # The window's launch option ("<join-roe-os.cmd>" --window %command%): the window, waited for.
-        self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window {steam} -windowed"'), [f'MODE window-wait [--window {steam} -windowed]'])
+        # --window with more after it: the console (it says what it takes).
+        self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window -x"'), ['MODE console [--window -x]'])
         self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --windowed"'), ['MODE console [--windowed]'])
 
     def test_window_or_console(self):
@@ -1198,8 +1194,7 @@ class JoinCmdStart(unittest.TestCase):
             self.assertEqual(copies[0].read_bytes(), (base / 'join-roe-os.cmd').read_bytes())
 
     def test_separate_files(self):
-        """separate-files/: join-roe-os.cmd chooses like the single file, join-roe-os-window.cmd is always the
-        window (waited for with arguments); both run join-roe-os.ps1 next to them, no copy."""
+        """separate-files/: join-roe-os.cmd chooses like the single file and runs join-roe-os.ps1 next to it, no copy."""
         temp = self.windows_temp()
         with tempfile.TemporaryDirectory(dir=temp) as tmp:
             base = Path(tmp) / 'a b!c'
@@ -1207,27 +1202,12 @@ class JoinCmdStart(unittest.TestCase):
             (base / 'join-roe-os.ps1').write_bytes((SEPARATE / 'join-roe-os.ps1').read_bytes())
             self.check_modes((SEPARATE / 'join-roe-os.cmd').read_text(), base)
             self.assertFalse((base / 'roe-join').exists())
-            window = (SEPARATE / 'join-roe-os-window.cmd').read_bytes().decode().replace('\r\n', '\n')
-            start = 'start "" /min powershell.exe '
-            wait = '\n  powershell.exe '
-            self.assertEqual((window.count(start), window.count(wait), window.count('\npowershell.exe ')), (1, 1, 0))
-            window = window.replace(start, 'echo MODE window [%ROE_JOIN_SELF%] [%ROE_JOIN_CODE%] [%ROE_JOIN_STEAM%] & rem ')
-            window = window.replace(wait, '\n  echo MODE window-wait [%ROE_JOIN_ARGS%] & rem ')
-            (base / 'join-roe-os-window.cmd').write_text(window.replace('\n', '\r\n'), newline='')
-            path = subprocess.run(['wslpath', '-w', str(base / 'join-roe-os-window.cmd')], capture_output=True, text=True, check=True).stdout.strip()
-            folder = path.rsplit('\\', 1)[0]
-            opened = [f'MODE window [{path}] [{folder}\\join-roe-os.ps1] [{path}]']
-            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" "'), opened)
-            self.assertEqual(self.run_batch(base, f'"{path}"'), opened)
-            steam = r'"C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium\SLauncher.exe" -steam -maintenance'
-            self.assertEqual(self.run_batch(base, f'cmd /c ""{path}" --window {steam} -windowed"'), [f'MODE window-wait [--window {steam} -windowed]'])
-            # Without join-roe-os.ps1 next to them: a message, no PowerShell.
+            # Without join-roe-os.ps1 next to it: a message, no PowerShell.
             (base / 'join-roe-os.ps1').unlink()
-            for name in ('join-roe-os.cmd', 'join-roe-os-window.cmd'):
-                launcher = subprocess.run(['wslpath', '-w', str(base / name)], capture_output=True, text=True, check=True).stdout.strip()
-                result = subprocess.run(['cmd.exe'], cwd=str(base), input=f'"{launcher}"\r\nexit\r\n', capture_output=True, text=True, timeout=30)
-                self.assertIn(f'join-roe-os.ps1 is missing next to {name}', result.stdout)
-                self.assertNotIn('MODE ', result.stdout)
+            launcher = subprocess.run(['wslpath', '-w', str(base / 'join-roe-os.cmd')], capture_output=True, text=True, check=True).stdout.strip()
+            result = subprocess.run(['cmd.exe'], cwd=str(base), input=f'"{launcher}"\r\nexit\r\n', capture_output=True, text=True, timeout=30)
+            self.assertIn('join-roe-os.ps1 is missing next to join-roe-os.cmd', result.stdout)
+            self.assertNotIn('MODE ', result.stdout)
 
     def test_separate_files_run(self):
         """separate-files/join-roe-os.cmd really runs join-roe-os.ps1 next to it, also with a download's mark
@@ -1252,7 +1232,7 @@ class JoinCmdStart(unittest.TestCase):
 
 
 SEPARATE = JOIN.parent / 'separate-files'
-SEPARATE_FILES = ('join-roe-os.cmd', 'join-roe-os-window.cmd', 'join-roe-os.ps1')
+SEPARATE_FILES = ('join-roe-os.cmd', 'join-roe-os.ps1')
 
 
 class SeparateFiles(unittest.TestCase):
@@ -1277,9 +1257,9 @@ class SeparateFiles(unittest.TestCase):
         self.assertTrue(ps1.endswith(single.split(b'\r\n#>\r\n', 1)[1]))
         self.assertTrue(all(line.startswith(b'#') for line in ps1.split(single.split(b'\r\n#>\r\n', 1)[1])[0].splitlines()))
         self.assertNotIn(b'@echo off', ps1)
-        for name in ('join-roe-os.cmd', 'join-roe-os-window.cmd'):
+        for name in ('join-roe-os.cmd',):
             launcher = (SEPARATE / name).read_text()
-            # Plain launchers: no PowerShell part, no copy of themselves, PowerShell only with -File of the .ps1.
+            # A plain launcher: no PowerShell part, no copy of itself, PowerShell only with -File of the .ps1.
             self.assertNotIn('<#', launcher)
             self.assertNotIn('#>', launcher)
             self.assertNotIn('type ', launcher)
@@ -1291,8 +1271,7 @@ class SeparateFiles(unittest.TestCase):
             self.assertTrue(starts)
             self.assertTrue(all(s.endswith('-NoProfile -ExecutionPolicy Bypass -File "%ROE_JOIN_PS1%"') or
                                 s.endswith('-NoProfile -ExecutionPolicy Bypass -File "!ROE_JOIN_PS1!"') for s in starts), starts)
-        self.assertIn('set "ROE_JOIN_STEAM=%~dp0join-roe-os-window.cmd"', (SEPARATE / 'join-roe-os.cmd').read_text())
-        self.assertIn('set "ROE_JOIN_STEAM=%~f0"', (SEPARATE / 'join-roe-os-window.cmd').read_text())
+        self.assertNotIn('ROE_JOIN_STEAM', (SEPARATE / 'join-roe-os.cmd').read_text())
 
     def test_changed_source_refused(self):
         source = (JOIN.parent / 'join-roe-os.cmd').read_bytes().decode('ascii')
@@ -1383,7 +1362,7 @@ class SteamLaunch(unittest.TestCase):
 
     def test_steam_profile(self):
         accounts = [{'name': 'Anna', 'token': 'a' * 64, 'last_used': 9}, {'name': 'Bob', 'token': 'b' * 64, 'last_used': 5}]
-        self.assertEqual(join.account_id('a' * 64), 'ffe054fe7ae0cb6d')   # join-roe-os.cmd's Get-AccountId agrees
+        self.assertEqual(join.account_id('a' * 64), 'ffe054fe7ae0cb6d')
         settings = {'servers': [{'address': 'old.example', 'last_used': 1}, {'address': 'new.example', 'last_used': 7}]}
         self.assertEqual(join.steam_server(settings), 'new.example')
         self.assertEqual(join.steam_server(settings, 'given.example'), 'given.example')
@@ -1536,31 +1515,6 @@ class SteamLaunch(unittest.TestCase):
                       "-language=en -garena '-uid=<ticket>' -server=127.0.0.1:8001", result.stdout, report)
         result = subprocess.run(command[:3] + ['--steam', 'proton', 'run', 'other.exe'], env=env, input='', capture_output=True, text=True, timeout=30)
         self.assertIn('names no SLauncher.exe or Europa_Client.exe', result.stdout)
-
-
-@unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
-class JoinCmdSteam(unittest.TestCase):
-    """join-roe-os.cmd's start through Steam: the command line, the game folder, the profile and the
-    launch options in localconfig.vdf, the same as join-roe-os.py's (through powershell.exe)."""
-    def test_functions(self):
-        def prepare(base):
-            (base / 'sample.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
-            added = join.set_launch_options(SAMPLE_VDF, STEAM_LINE)
-            (base / 'added.vdf').write_bytes(added.encode('utf-8'))
-            other = SAMPLE_VDF.replace('755790"\n\t\t\t\t\t{', '228980"\n\t\t\t\t\t{')
-            (base / 'other.vdf').write_bytes(other.encode('utf-8'))
-            (base / 'other-added.vdf').write_bytes(join.set_launch_options(other, '-x').encode('utf-8'))
-            crlf = SAMPLE_VDF.replace('\n', '\r\n')
-            (base / 'crlf.vdf').write_bytes(crlf.encode('utf-8'))
-            (base / 'crlf-added.vdf').write_bytes(join.set_launch_options(crlf, '-x').encode('utf-8'))
-            steam = base / 'steam'
-            touch(steam / 'userdata/30642568/config/localconfig.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
-            touch(steam / 'userdata/111/config/localconfig.vdf', '"UserLocalConfigStore"\n{\n}\n')
-            touch(steam / 'config/loginusers.vdf', '"users"\n{\n\t"%d"\n\t{\n\t\t"PersonaName"\t\t"Anna"\n\t\t"MostRecent"\t\t"1"\n\t}\n}\n'
-                  % (30642568 + join.STEAM_ID64_BASE))
-            touch(base / 'game/Europa_Client.exe')
-            touch(base / 'game/XVersion/Europa_Client.exe')
-        run_powershell(self, 'join_cmd_steam.ps1', prepare, 55)
 
 
 if __name__ == '__main__':
