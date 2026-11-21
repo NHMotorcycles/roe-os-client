@@ -47,6 +47,9 @@ Steam's **Play** button can open the join window instead of the normal game laun
    (Shift + right-click join-roe-os.cmd > **Copy as path** gives you the quoted path.)
 3. Click **Play** in Steam: the join window opens, and you start the game with its **Play**.
 
+Or use [with-steam/join-roe-os.cmd](with-steam/join-roe-os.cmd): it sets this up for you from its window
+(some virus scanners flag that copy).
+
 To go back to the normal launcher, empty the launch options. If you move join-roe-os.cmd, change
 the path there too.
 

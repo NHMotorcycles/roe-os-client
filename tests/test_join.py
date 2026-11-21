@@ -1425,5 +1425,46 @@ class SteamLaunch(unittest.TestCase):
         self.assertIn('names no SLauncher.exe or Europa_Client.exe', result.stdout)
 
 
+WITH_STEAM = JOIN.parent / 'with-steam' / 'join-roe-os.cmd'
+
+
+@unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
+class WithSteam(unittest.TestCase):
+    """with-steam/join-roe-os.cmd: join-roe-os.cmd with Start through Steam (the last version before its
+    removal, ff1b634): the Steam start's functions (command line, game folder, profile, launch options in
+    localconfig.vdf, the same as join-roe-os.py's) and its window (through powershell.exe)."""
+    def test_steam_functions(self):
+        def prepare(base):
+            (base / 'sample.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
+            added = join.set_launch_options(SAMPLE_VDF, STEAM_LINE)
+            (base / 'added.vdf').write_bytes(added.encode('utf-8'))
+            other = SAMPLE_VDF.replace('755790"\n\t\t\t\t\t{', '228980"\n\t\t\t\t\t{')
+            (base / 'other.vdf').write_bytes(other.encode('utf-8'))
+            (base / 'other-added.vdf').write_bytes(join.set_launch_options(other, '-x').encode('utf-8'))
+            crlf = SAMPLE_VDF.replace('\n', '\r\n')
+            (base / 'crlf.vdf').write_bytes(crlf.encode('utf-8'))
+            (base / 'crlf-added.vdf').write_bytes(join.set_launch_options(crlf, '-x').encode('utf-8'))
+            steam = base / 'steam'
+            touch(steam / 'userdata/30642568/config/localconfig.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
+            touch(steam / 'userdata/111/config/localconfig.vdf', '"UserLocalConfigStore"\n{\n}\n')
+            touch(steam / 'config/loginusers.vdf', '"users"\n{\n\t"%d"\n\t{\n\t\t"PersonaName"\t\t"Anna"\n\t\t"MostRecent"\t\t"1"\n\t}\n}\n'
+                  % (30642568 + join.STEAM_ID64_BASE))
+            touch(base / 'game/Europa_Client.exe')
+            touch(base / 'game/XVersion/Europa_Client.exe')
+        run_powershell(self, 'join_cmd_steam.ps1', prepare, 55, WITH_STEAM)
+
+    def test_window(self):
+        def prepare(base):
+            (base / 'game').mkdir()
+        run_powershell(self, 'join_gui_steam.ps1', prepare, 54, WITH_STEAM)
+
+    def test_same_server_part(self):
+        """The Steam copy is the main script plus the Steam start: the same version line."""
+        version = re.compile(r"^\$joinVersion = '[0-9.]+'", re.M)
+        steam = version.findall(WITH_STEAM.read_text())
+        self.assertEqual(len(steam), 1)
+        self.assertEqual(steam, version.findall((JOIN.parent / 'join-roe-os.cmd').read_text()))
+
+
 if __name__ == '__main__':
     unittest.main()

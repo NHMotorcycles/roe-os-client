@@ -7,6 +7,8 @@ CHANGELOG.md.
 
 ## Unreleased
 
+- with-steam/join-roe-os.cmd: the join script with Start through Steam (the version before its
+  removal) for players whose virus scanner does not flag it; the main join-roe-os.cmd stays without it.
 - Steam's Play button can open the join window again, set up by hand: the launch option
   `"<path>\join-roe-os.cmd" --window %command%` (README, "Start it from Steam"). `--window` with
   more after it now opens the window; the window ignores Steam's game command and starts the game
