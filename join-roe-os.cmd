@@ -21,7 +21,7 @@ if not defined ROE_JOIN_ARGS (
   set "ROE_JOIN_WINDOW=1"
 )
 if defined ROE_JOIN_WINDOW (
-  start "" /min powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "!ROE_JOIN_PS1!"
+  start "" /min powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "!ROE_JOIN_PS1!"
   exit /b 0
 )
 powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File "!ROE_JOIN_PS1!"

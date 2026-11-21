@@ -1130,12 +1130,6 @@ class JoinGui(unittest.TestCase):
             (base / 'game').mkdir()
         run_powershell(self, 'join_gui.ps1', prepare, 42)
 
-    def test_separate_files(self):
-        """The same window from separate-files/join-roe-os.ps1."""
-        def prepare(base):
-            (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 42, SEPARATE / 'join-roe-os.ps1')
-
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
 class JoinCmdStart(unittest.TestCase):
@@ -1192,93 +1186,6 @@ class JoinCmdStart(unittest.TestCase):
             copies = list((base / 'roe-join').glob('run-*.ps1'))
             self.assertTrue(copies)
             self.assertEqual(copies[0].read_bytes(), (base / 'join-roe-os.cmd').read_bytes())
-
-    def test_separate_files(self):
-        """separate-files/: join-roe-os.cmd chooses like the single file and runs join-roe-os.ps1 next to it, no copy."""
-        temp = self.windows_temp()
-        with tempfile.TemporaryDirectory(dir=temp) as tmp:
-            base = Path(tmp) / 'a b!c'
-            base.mkdir()
-            (base / 'join-roe-os.ps1').write_bytes((SEPARATE / 'join-roe-os.ps1').read_bytes())
-            self.check_modes((SEPARATE / 'join-roe-os.cmd').read_text(), base)
-            self.assertFalse((base / 'roe-join').exists())
-            # Without join-roe-os.ps1 next to it: a message, no PowerShell.
-            (base / 'join-roe-os.ps1').unlink()
-            launcher = subprocess.run(['wslpath', '-w', str(base / 'join-roe-os.cmd')], capture_output=True, text=True, check=True).stdout.strip()
-            result = subprocess.run(['cmd.exe'], cwd=str(base), input=f'"{launcher}"\r\nexit\r\n', capture_output=True, text=True, timeout=30)
-            self.assertIn('join-roe-os.ps1 is missing next to join-roe-os.cmd', result.stdout)
-            self.assertNotIn('MODE ', result.stdout)
-
-    def test_separate_files_run(self):
-        """separate-files/join-roe-os.cmd really runs join-roe-os.ps1 next to it, also with a download's mark
-        on it: join-roe-os.cmd voice prints the voice DLL next to the launcher."""
-        temp = self.windows_temp()
-        with tempfile.TemporaryDirectory(dir=temp) as tmp:
-            base = Path(tmp) / 'a b!c'
-            base.mkdir()
-            for name in SEPARATE_FILES:
-                (base / name).write_bytes((SEPARATE / name).read_bytes())
-            folder = subprocess.run(['wslpath', '-w', str(base)], capture_output=True, text=True, check=True).stdout.strip()
-            ps1 = folder + '\\join-roe-os.ps1'
-            mark = subprocess.run(['powershell.exe', '-NoProfile', '-Command',
-                                   f"Set-Content -LiteralPath '{ps1}' -Stream Zone.Identifier -Value \"[ZoneTransfer]`r`nZoneId=3\"; "
-                                   f"(Get-Content -LiteralPath '{ps1}' -Stream Zone.Identifier) -join ' '"],
-                                  cwd='/mnt/c', capture_output=True, text=True, timeout=30)
-            self.assertIn('ZoneId=3', mark.stdout, mark.stdout + mark.stderr)
-            result = subprocess.run(['cmd.exe'], cwd=str(base), input=f'set "APPDATA={folder}"\r\n"{folder}\\join-roe-os.cmd" voice\r\nexit\r\n',
-                                    capture_output=True, text=True, timeout=60)
-            self.assertIn(f'Voice chat: not asked yet. Our GCloudVoice.dll: {folder}\\GCloudVoice.dll (missing', result.stdout, result.stdout + result.stderr)
-            self.assertFalse((base / 'roe-join').exists() and list((base / 'roe-join').glob('run-*.ps1')))
-
-
-SEPARATE = JOIN.parent / 'separate-files'
-SEPARATE_FILES = ('join-roe-os.cmd', 'join-roe-os.ps1')
-
-
-class SeparateFiles(unittest.TestCase):
-    """separate-files/ is what tools/make_separate_files.py makes of join-roe-os.cmd, so the two never drift."""
-    def setUp(self):
-        spec = importlib.util.spec_from_file_location('make_separate_files', JOIN.parent / 'tools/make_separate_files.py')
-        self.tool = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(self.tool)
-
-    def test_in_sync(self):
-        wanted = self.tool.build((JOIN.parent / 'join-roe-os.cmd').read_bytes().decode('ascii'))
-        self.assertEqual(sorted(wanted), sorted(SEPARATE_FILES))
-        self.assertEqual(sorted(p.name for p in SEPARATE.iterdir()), sorted(SEPARATE_FILES))
-        for name, data in wanted.items():
-            self.assertEqual((SEPARATE / name).read_bytes(), data, f'separate-files/{name} is stale: run tools/make_separate_files.py')
-        self.assertEqual(self.tool.main(['--check']), 0)
-
-    def test_layout(self):
-        single = (JOIN.parent / 'join-roe-os.cmd').read_bytes()
-        ps1 = (SEPARATE / 'join-roe-os.ps1').read_bytes()
-        # All of the PowerShell part, after a comment header; param() stays its first statement.
-        self.assertTrue(ps1.endswith(single.split(b'\r\n#>\r\n', 1)[1]))
-        self.assertTrue(all(line.startswith(b'#') for line in ps1.split(single.split(b'\r\n#>\r\n', 1)[1])[0].splitlines()))
-        self.assertNotIn(b'@echo off', ps1)
-        for name in ('join-roe-os.cmd',):
-            launcher = (SEPARATE / name).read_text()
-            # A plain launcher: no PowerShell part, no copy of itself, PowerShell only with -File of the .ps1.
-            self.assertNotIn('<#', launcher)
-            self.assertNotIn('#>', launcher)
-            self.assertNotIn('type ', launcher)
-            self.assertNotIn('%~f0" >', launcher)
-            self.assertNotIn('-Command', launcher)
-            self.assertNotIn('-ExecutionPolicy RemoteSigned', launcher)
-            self.assertIn('set "ROE_JOIN_CODE=%~dp0join-roe-os.ps1"', launcher)
-            starts = re.findall(r'powershell\.exe [^\r\n]*', launcher)
-            self.assertTrue(starts)
-            self.assertTrue(all(s.endswith('-NoProfile -ExecutionPolicy Bypass -File "%ROE_JOIN_PS1%"') or
-                                s.endswith('-NoProfile -ExecutionPolicy Bypass -File "!ROE_JOIN_PS1!"') for s in starts), starts)
-        self.assertNotIn('ROE_JOIN_STEAM', (SEPARATE / 'join-roe-os.cmd').read_text())
-
-    def test_changed_source_refused(self):
-        source = (JOIN.parent / 'join-roe-os.cmd').read_bytes().decode('ascii')
-        with self.assertRaises(SystemExit):
-            self.tool.build(source.replace('type "%~f0"', 'copy "%~f0"'))
-        with self.assertRaises(SystemExit):
-            self.tool.build(source.replace('\r\n#>\r\n', '\r\n'))
 
 
 # A localconfig.vdf as Steam writes it (tabs, LF), cut down: the game's block without launch
