@@ -345,7 +345,7 @@ function Test-Administrator {
 # -FirewallStep (Invoke-FirewallStep). Returns Ok and Reason: done; declined (the prompt said no,
 # or Windows denies it on this account); not-admin (it ran without administrator rights, User
 # Account Control off on a standard account); failed (Detail: the error); no-start (Windows did
-# not start it).
+# not start it). A declined or not started prompt is offered again (Ask).
 function Invoke-Elevated($Plan, [bool]$Admin = (Test-Administrator)) {
     $folder = Join-Path $env:APPDATA 'roe-join'
     if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder | Out-Null }
@@ -362,13 +362,19 @@ function Invoke-Elevated($Plan, [bool]$Admin = (Test-Administrator)) {
             & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File $script -FirewallStep $step | Out-Host
             $code = $LASTEXITCODE
         } else {
-            $code = (Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', "`"$script`"", '-FirewallStep', "`"$step`"")).ExitCode
+            $arguments = "-NoProfile -ExecutionPolicy RemoteSigned -File `"$script`" -FirewallStep `"$step`""
+            while ($null -eq $code) {
+                # The window to the front first: Windows shows the prompt in front only for the window in front.
+                if ($sync) { $sync.Events.Enqueue([pscustomobject]@{ Kind = 'front'; Data = $null }); Start-Sleep -Milliseconds 300 }
+                try { $code = Start-Elevated $arguments }
+                catch {
+                    $failure = Get-ElevationFailure $_
+                    if ((Ask "$(Get-ElevationNote $failure) Try again? (y/n)" 'y') -notmatch '^[yY]') { return $failure }
+                }
+            }
         }
     } catch {
-        $native = $_.Exception.InnerException.NativeErrorCode
-        if ($null -eq $native) { $native = $_.Exception.NativeErrorCode }
-        $reason = if ($native -eq 1223 -or ($null -eq $native -and $_.Exception.Message -match 'cancel')) { 'declined' } else { 'no-start' }
-        return [pscustomobject]@{ Ok = $false; Reason = $reason; Detail = $_.Exception.Message }
+        return Get-ElevationFailure $_
     } finally {
         Remove-Item -LiteralPath $script, $step -ErrorAction SilentlyContinue
     }
@@ -377,6 +383,39 @@ function Invoke-Elevated($Plan, [bool]$Admin = (Test-Administrator)) {
     if ($code -eq 0) { return [pscustomobject]@{ Ok = $true; Reason = 'done'; Detail = '' } }
     if ($code -eq 3) { return [pscustomobject]@{ Ok = $false; Reason = 'not-admin'; Detail = '' } }
     return [pscustomobject]@{ Ok = $false; Reason = 'failed'; Detail = $detail }
+}
+# Why the elevated start failed (its error record): declined (the prompt said no) or no-start.
+function Get-ElevationFailure($Record) {
+    $native = $Record.Exception.InnerException.NativeErrorCode
+    if ($null -eq $native) { $native = $Record.Exception.NativeErrorCode }
+    $reason = if ($native -eq 1223 -or ($null -eq $native -and $Record.Exception.Message -match 'cancel')) { 'declined' } else { 'no-start' }
+    $message = if ($Record.Exception.InnerException) { $Record.Exception.InnerException.Message } else { $Record.Exception.Message }
+    return [pscustomobject]@{ Ok = $false; Reason = $reason; Detail = $message }
+}
+# The window the administrator prompt belongs to: the join window ($sync.Owner, set by the window)
+# or this console's. Windows brings the prompt to the front only for a window in front that asks;
+# Start-Process names none (and hides any error), so from the window's hidden PowerShell the prompt
+# could stay behind other windows or as a button in the taskbar.
+function Get-PromptOwner {
+    if ($sync -and $sync.Owner) { return [IntPtr]$sync.Owner }
+    try { return [Diagnostics.Process]::GetCurrentProcess().MainWindowHandle } catch { return [IntPtr]::Zero }
+}
+# The elevated start of powershell.exe with Arguments: through the shell with "runas", in a
+# normal window, Owner as the prompt's window (.NET passes it on only with ErrorDialog).
+function New-ElevatedStart([string]$Arguments, [IntPtr]$Owner) {
+    $start = New-Object Diagnostics.ProcessStartInfo 'powershell.exe', $Arguments
+    $start.Verb = 'runas'
+    $start.UseShellExecute = $true
+    $start.WindowStyle = 'Normal'
+    $start.ErrorDialog = $true
+    $start.ErrorDialogParentHandle = $Owner
+    return $start
+}
+# Starts it, waits for it and returns its exit code.
+function Start-Elevated([string]$Arguments) {
+    $process = [Diagnostics.Process]::Start((New-ElevatedStart $Arguments (Get-PromptOwner)))
+    if (-not $process) { throw 'Windows did not start the step.' }
+    try { $process.WaitForExit(); return $process.ExitCode } finally { $process.Dispose() }
 }
 # The step itself, in the administrator's PowerShell: creates the rules of the file at Path (if one
 # fails, the ones it created go again and nothing is removed), then removes the named rules.
@@ -405,11 +444,12 @@ function Invoke-FirewallStep([string]$Path) {
 }
 # What went wrong in the administrator step, in words. Empty when it worked.
 function Get-ElevationNote($Result) {
+    $runAsOnce = 'right-click join-roe-os.cmd > Run as administrator once (on a standard Windows account this needs an administrator''s password).'
     if (-not $Result -or $Result.Reason -eq 'done') { return '' }
     switch ($Result.Reason) {
-        'declined' { return 'The administrator prompt was declined, or Windows does not allow it on this account.' }
-        'not-admin' { return 'The step ran without administrator rights (User Account Control is off or never asks on this account, so no prompt appeared).' }
-        'no-start' { return "Windows could not start the step as administrator: $($Result.Detail)" }
+        'declined' { return "Windows did not ask for administrator rights, or the prompt was declined: $runAsOnce" }
+        'not-admin' { return "Windows did not ask for administrator rights (User Account Control is off or never asks on this account, so the step ran without them): $runAsOnce" }
+        'no-start' { return "Windows did not ask for administrator rights ($($Result.Detail)): $runAsOnce" }
     }
     if ($Result.Detail) { return "Changing the firewall rules failed: $($Result.Detail)" }
     return 'Changing the firewall rules failed.'
@@ -580,7 +620,7 @@ function Set-FolderRules([string[]]$Programs, $Folder, [string[]]$Trusted) {
 function Remove-Rules($Rules, [string]$What) {
     $Rules = @($Rules | Where-Object { $_ })
     if (-not $Rules.Count) { Write-Host "No firewall rules $What."; return }
-    $prompt = if (Test-Administrator) { '' } else { ' (a Windows prompt appears)' }
+    $prompt = if (Test-Administrator) { '' } else { ' (a Windows prompt appears; not in front: click the flashing shield in the taskbar)' }
     Write-Host "Removing $($Rules.Count) firewall rules $What$prompt."
     $step = Invoke-Elevated ([pscustomobject]@{ Create = @(); Remove = (Get-RuleNames $Rules) })
     if (-not $step.Ok) { throw ('The firewall rules were not removed. ' + (Get-ElevationNote $step)) }
@@ -1553,7 +1593,7 @@ function Update-Firewall([string]$Client, $ServerList, [string]$Server, [string[
             $others = @($folder.Other | Where-Object { $_.Local })
             if ($others.Count) { Write-Host "Block rules of other programs for this game are removed: $(@($others | ForEach-Object { '"' + $_.DisplayName + '"' }) -join ', ')." }
             if (Test-Administrator) { Write-Host 'Running as administrator: the rules are set now.' }
-            else { Write-Host 'Administrator approval is needed for that (a Windows prompt appears).' }
+            else { Write-Host 'Administrator approval is needed for that (a Windows prompt appears; not in front: click the flashing shield in the taskbar).' }
             $step = Set-FolderRules $programs $folder $wanted
             if (-not $step.Ok) { $addressesDone = $false }
         }
@@ -2589,6 +2629,10 @@ function Receive-GuiEvents {
             switch ($item.Kind) {
                 'line' { Add-Line $item.Data.Text $item.Data.Level }
                 'ask' { Show-Question $item.Data }
+                'front' {
+                    if ($gui.Window.WindowState -eq 'Minimized') { $gui.Window.WindowState = 'Normal' }
+                    [void]$gui.Window.Activate()
+                }
                 'stats' { Set-StatsText $gui.C.ServerStats $item.Data }
                 'game' {
                     $gui.GameRunning = $true
@@ -3163,6 +3207,8 @@ function Start-Gui([string]$Code) {
     Write-GuiLog "join-roe-os.cmd $joinVersion opens its window ($env:ROE_JOIN_SELF)."
     $window = [Windows.Markup.XamlReader]::Parse((Get-GuiXaml))
     $gui.Window = $window
+    # The administrator prompt belongs to this window (Get-PromptOwner).
+    $window.Add_SourceInitialized({ $sync.Owner = (New-Object Windows.Interop.WindowInteropHelper $this).Handle })
     $gui.C = @{}
     foreach ($name in (Get-GuiControlNames)) { $gui.C[$name] = $window.FindName($name) }
     $gui.Recent = New-Object Collections.ArrayList

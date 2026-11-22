@@ -861,7 +861,29 @@ class JoinCmdServers(unittest.TestCase):
 class JoinCmdFirewall(unittest.TestCase):
     """join-roe-os.cmd's ADDRESSES parsing, blocked ranges, trusted servers and rule updates (through powershell.exe)."""
     def test_functions(self):
-        run_powershell(self, 'join_cmd_firewall.ps1', lambda base: None, 50)
+        run_powershell(self, 'join_cmd_firewall.ps1', lambda base: None, 56)
+
+    def test_with_steam(self):
+        run_powershell(self, 'join_cmd_firewall.ps1', lambda base: None, 56, WITH_STEAM)
+
+
+class JoinCmdElevation(unittest.TestCase):
+    """The administrator prompt of both join-roe-os.cmd copies: started with the window it belongs to
+    (Start-Process names none, so the prompt could open behind), not hidden, without P/Invoke in the main one."""
+    def test_start(self):
+        for path in (JOIN.parent / 'join-roe-os.cmd', WITH_STEAM):
+            text = path.read_text()
+            with self.subTest(path=path.parent.name):
+                self.assertNotRegex(text, r'(?i)-Verb\s+RunAs')
+                if path != WITH_STEAM:
+                    self.assertNotIn('DllImport', text)
+                self.assertEqual(text.count('[Diagnostics.Process]::Start((New-ElevatedStart $Arguments (Get-PromptOwner)))'), 1)
+                self.assertIn("$start.ErrorDialog = $true", text)
+                self.assertIn("$start.ErrorDialogParentHandle = $Owner", text)
+                self.assertIn("$start.WindowStyle = 'Normal'", text)
+                self.assertIn('$window.Add_SourceInitialized({ $sync.Owner = (New-Object Windows.Interop.WindowInteropHelper $this).Handle })', text)
+                self.assertIn("if ($sync) { $sync.Events.Enqueue([pscustomobject]@{ Kind = 'front'; Data = $null });", text)
+                self.assertIn('Try again? (y/n)', text)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
@@ -1128,7 +1150,7 @@ class JoinGui(unittest.TestCase):
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 42)
+        run_powershell(self, 'join_gui.ps1', prepare, 43)
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
@@ -1456,7 +1478,7 @@ class WithSteam(unittest.TestCase):
     def test_window(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui_steam.ps1', prepare, 54, WITH_STEAM)
+        run_powershell(self, 'join_gui_steam.ps1', prepare, 55, WITH_STEAM)
 
     def test_same_server_part(self):
         """The Steam copy is the main script plus the Steam start: the same version line."""

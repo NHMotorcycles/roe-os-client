@@ -49,6 +49,14 @@ $window = [Windows.Markup.XamlReader]::Parse((Get-GuiXaml))
 $gui.C = @{}
 foreach ($name in (Get-GuiControlNames)) { $gui.C[$name] = $window.FindName($name) }
 Check 'main window' (@($gui.C.Values | Where-Object { $null -eq $_ }).Count -eq 0 -and $gui.C.Count -eq (Get-GuiControlNames).Count)
+# Before the administrator prompt the worker brings the window to the front (the prompt comes up in
+# front only for the window in front), out of the taskbar when minimized.
+$gui.Window = $window
+$window.WindowState = 'Minimized'
+$sync.Events.Enqueue([pscustomobject]@{ Kind = 'front'; Data = $null })
+Receive-GuiEvents
+Check 'front event' ("$($window.WindowState)" -eq 'Normal' -and $sync.Events.IsEmpty)
+$gui.Window = $null
 # The server line: a region per line, an offline one greyed, the others in the line's color.
 Set-StatsText $gui.C.ServerStats "[12:00] On the server now: EU (normal): 1 online, 0 searching, 0 matches`nNA (normal): offline."
 $runs = @($gui.C.ServerStats.Inlines | Where-Object { $_ -is [Windows.Documents.Run] })
@@ -188,7 +196,7 @@ $worker.Dispose()
 
 # The firewall text and the server line.
 $text = (Get-GuiFirewallText @('no join-roe-os.cmd rule for 2 of 2 game programs') (Get-ElevationNote ([pscustomobject]@{ Ok = $false; Reason = 'declined'; Detail = '' })) @() $false) -join "`n"
-Check 'firewall text' ($text -like 'The firewall rules could not be set. The administrator prompt was declined*' -and $text -match 'Right-click join-roe-os\.cmd > Run as administrator' -and
+Check 'firewall text' ($text -like 'The firewall rules could not be set. Windows did not ask for administrator rights, or the prompt was declined: right-click*' -and $text -match 'Right-click join-roe-os\.cmd > Run as administrator' -and
     $text -match 'off under Advanced' -and $text -match '- no join-roe-os\.cmd rule')
 $text = (Get-GuiFirewallText @(1..7 | ForEach-Object { "problem $_" }) '' @([pscustomobject]@{ Local = $false }) $true) -join "`n"
 Check 'firewall text: policy, admin' ($text -like 'The firewall rules are not as they should be*' -and $text -match 'and 2 more' -and $text -match 'policy or security product' -and $text -notmatch 'Right-click')
