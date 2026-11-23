@@ -892,6 +892,17 @@ class JoinCmdElevation(unittest.TestCase):
                 self.assertIn('Try again? (y/n)', text)
 
 
+class NoCompiledCode(unittest.TestCase):
+    """join-roe-os.cmd compiles no C# at run time (Add-Type with source or DllImport: what virus
+    scanners flag); its only Add-Type loads the WPF and WinForms assemblies. No em dash, not even made."""
+    def test_main_copy(self):
+        text = (JOIN.parent / 'join-roe-os.cmd').read_text()
+        self.assertEqual(set(re.findall(r'(?i)Add-Type\s+-?\w*', text)), {'Add-Type -AssemblyName'})
+        self.assertNotRegex(text, r'(?i)DllImport|TypeDefinition|MemberDefinition|ComImport')
+        self.assertNotIn('\u2014', text)
+        self.assertNotRegex(text, r'(?i)0x2014')
+
+
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdExport(unittest.TestCase):
     """join-roe-os.cmd's account backup: export, import, merge and a different certificate (through powershell.exe)."""
