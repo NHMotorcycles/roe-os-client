@@ -1078,9 +1078,25 @@ function Get-ServerStats([string]$Ip, [string]$Folder) {
     $script:statsCache[$Ip] = @{ At = $now; Reply = $reply }
     return $reply
 }
-# The answer to STATS as one line, a part per region: "EU (normal): 12 online, 3 searching,
-# 2 matches | NA (normal): offline". A region whose state (the field after the name) is down takes
-# no new match (the game greys it out). Empty from an older server.
+# The searching players per mode of a STATS region (its field after the state: "solo-tpp:2;squad-fpp:1",
+# "-" for none): "solo 2, squad FPP 1", in the game's order; unknown modes left out.
+function Format-QueueCounts([string]$Field) {
+    $counts = @{}
+    foreach ($part in $Field.Split(';')) {
+        if ($part -cmatch '^(solo|duo|squad|training)-(tpp|fpp):(\d{1,9})$' -and [int]$Matches[3]) { $counts["$($Matches[1])-$($Matches[2])"] = [int]$Matches[3] }
+    }
+    $shown = @()
+    foreach ($mode in @('solo', 'duo', 'squad', 'training')) {
+        foreach ($view in @('tpp', 'fpp')) {
+            if ($counts["$mode-$view"]) { $shown += "$mode$(if ($view -eq 'fpp') { ' FPP' }) $($counts["$mode-$view"])" }
+        }
+    }
+    return $shown -join ', '
+}
+# The answer to STATS as one line, a part per region: "EU (normal): 12 online, 3 searching (solo 2,
+# squad FPP 1), 2 matches | NA (normal): offline". A region whose state (the field after the name) is
+# down takes no new match (the game greys it out). Empty from an older server, the modes only from
+# a server that counts them.
 function Format-Stats([string]$Reply) {
     if ($Reply -cne 'OK' -and $Reply -cnotmatch '^OK ') { return '' }
     $parts = @()
@@ -1095,7 +1111,9 @@ function Format-Stats([string]$Reply) {
         if (-not $name) { $name = "zone $($fields[0])" }
         if ($fields.Count -gt 6 -and $fields[6] -ceq 'down') { $parts += "$name ($($fields[1])): offline"; continue }
         $matchWord = if ([int]$fields[4] -eq 1) { 'match' } else { 'matches' }
-        $parts += "$name ($($fields[1])): $([int]$fields[2]) online, $([int]$fields[3]) searching, $([int]$fields[4]) $matchWord"
+        $modes = if ($fields.Count -gt 7) { Format-QueueCounts $fields[7] } else { '' }
+        $searching = "$([int]$fields[3]) searching$(if ($modes) { " ($modes)" })"
+        $parts += "$name ($($fields[1])): $([int]$fields[2]) online, $searching, $([int]$fields[4]) $matchWord"
     }
     return $parts -join ' | '
 }
@@ -1958,6 +1976,7 @@ function Get-GuiLanguages {
   "Region": "Region",
   "Online": "Online",
   "Queued": "In queue",
+  "Modes": "Queue by mode",
   "Games": "Matches",
   "Offline": "Offline",
   "ServerStatus": "Server status",
@@ -2033,6 +2052,7 @@ function Get-GuiLanguages {
   "Region": "Region",
   "Online": "Online",
   "Queued": "I k\u00f8",
+  "Modes": "K\u00f8 pr. tilstand",
   "Games": "Kampe",
   "Offline": "Offline",
   "ServerStatus": "Serverstatus",
@@ -2108,6 +2128,7 @@ function Get-GuiLanguages {
   "Region": "Region",
   "Online": "Online",
   "Queued": "In Warteschlange",
+  "Modes": "Warteschlange je Modus",
   "Games": "Matches",
   "Offline": "Offline",
   "ServerStatus": "Serverstatus",
@@ -2183,6 +2204,7 @@ function Get-GuiLanguages {
   "Region": "R\u00e9gion",
   "Online": "En ligne",
   "Queued": "En attente",
+  "Modes": "Attente par mode",
   "Games": "Parties",
   "Offline": "Hors ligne",
   "ServerStatus": "\u00c9tat du serveur",
@@ -2258,6 +2280,7 @@ function Get-GuiLanguages {
   "Region": "Regi\u00f3n",
   "Online": "En l\u00ednea",
   "Queued": "En cola",
+  "Modes": "Cola por modo",
   "Games": "Partidas",
   "Offline": "Sin conexi\u00f3n",
   "ServerStatus": "Estado del servidor",
@@ -2700,12 +2723,13 @@ $(Get-GuiTheme $HighContrast)
                           TextElement.FontWeight="SemiBold">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="3*"/><ColumnDefinition Width="*"/>
                       </Grid.ColumnDefinitions>
                       <TextBlock Grid.Column="0" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Region}"/>
                       <TextBlock Grid.Column="1" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Online}"/>
                       <TextBlock Grid.Column="2" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Queued}"/>
-                      <TextBlock Grid.Column="3" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Games}"/>
+                      <TextBlock Grid.Column="3" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Modes}"/>
+                      <TextBlock Grid.Column="4" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Games}"/>
                     </Grid>
                     <ItemsPresenter/>
                   </StackPanel>
@@ -2717,7 +2741,7 @@ $(Get-GuiTheme $HighContrast)
                     <Grid x:Name="Row">
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="3*"/><ColumnDefinition Width="*"/>
                       </Grid.ColumnDefinitions>
                       <DockPanel>
                         <Ellipse x:Name="Availability" Width="7" Height="7" Margin="9,0,0,0" VerticalAlignment="Center" Fill="{StaticResource Available}" IsHitTestVisible="False"/>
@@ -2725,7 +2749,8 @@ $(Get-GuiTheme $HighContrast)
                       </DockPanel>
                       <TextBlock Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Online}"/>
                       <TextBlock Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Queued}"/>
-                      <TextBlock Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Games}"/>
+                      <TextBlock Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Modes}"/>
+                      <TextBlock Grid.Column="4" Style="{StaticResource StatCell}" Text="{Binding Games}"/>
                     </Grid>
                   </Border>
                   <DataTemplate.Triggers>
@@ -2906,7 +2931,7 @@ function Set-GuiServerStatus([string]$Text, [string]$Level = 'info') {
     elseif ($Text -eq 'Add the server the host gave you: Add server... (its IP address or domain).') { $Text = $gui.Strings.AddFirst }
     elseif ($Text -eq 'No answer from the account service: the server may be down, or it has no accounts (then it takes a plain name).') { $Text = $gui.Strings.NoServerInfo }
     $notes = New-Object 'System.Collections.Generic.List[string]'
-    $regionPattern = '^(?<region>.+ \([a-z]{1,12}\)): (?:offline|(?<online>\d+) online, (?<queued>\d+) searching, (?<games>\d+) match(?:es)?)(?:\.(?: (?<notice>.*))?)?$'
+    $regionPattern = '^(?<region>.+ \([a-z]{1,12}\)): (?:offline|(?<online>\d+) online, (?<queued>\d+) searching(?: \((?<modes>[^)]*)\))?, (?<games>\d+) match(?:es)?)(?:\.(?: (?<notice>.*))?)?$'
     $rows = @(foreach ($line in ($Text -split "\r?\n")) {
         # Periodic game updates prefix the first region with a timestamp and "On the server now:".
         $prefix = [regex]::Match($line, '^(?:\[(?<time>\d{2}:\d{2})\] )?On the server now: ')
@@ -2922,6 +2947,7 @@ function Set-GuiServerStatus([string]$Text, [string]$Level = 'info') {
             Region  = $region.Groups['region'].Value
             Online  = if ($offline) { $gui.Strings.Offline } else { $region.Groups['online'].Value }
             Queued  = if ($offline) { '-' } else { $region.Groups['queued'].Value }
+            Modes   = if ($offline) { '-' } else { $region.Groups['modes'].Value }
             Games   = if ($offline) { '-' } else { $region.Groups['games'].Value }
             Offline = $offline
         }

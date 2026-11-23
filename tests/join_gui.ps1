@@ -72,6 +72,13 @@ Set-GuiLanguage 'en'
 Set-GuiServerStatus "[12:00] On the server now: EU (normal): 1 online, 0 searching, 2 matches`nNA (normal): offline."
 $table = $gui.C.RegionTable
 $eu, $na = $table.ItemsSource
+Check 'server table: no modes, offline' ($eu.Modes -ceq '' -and $na.Modes -ceq '-' -and $na.Queued -ceq '-')
+Set-GuiServerStatus (Get-ServerInfoText ([pscustomobject]@{ Info = 'OK players=3'; TooOld = ''; Notice = $null
+    Regions = (Format-Stats 'OK 7,normal,3,3,0,EU%20SERVER,up,solo-tpp:2;squad-fpp:1') })).Text
+Check 'server table: modes' ($table.Items.Count -eq 1 -and $table.Items[0].Queued -ceq '3' -and $table.Items[0].Modes -ceq 'solo 2, squad FPP 1' -and $table.Items[0].Games -ceq '0' -and
+    $gui.C.ServerStats.Text -ceq '')
+Set-GuiServerStatus "[12:00] On the server now: EU (normal): 1 online, 0 searching, 2 matches`nNA (normal): offline."
+$eu, $na = $table.ItemsSource
 Check 'server table: read-only region counts and offline state' ($table.Items.Count -eq 2 -and $table -isnot [Windows.Controls.Primitives.Selector] -and
     -not $table.Focusable -and -not $table.IsTabStop -and $eu.Region -eq 'EU (normal)' -and $eu.Online -eq '1' -and $eu.Queued -eq '0' -and
     $eu.Games -eq '2' -and -not $eu.Offline -and $na.Region -eq 'NA (normal)' -and $na.Offline -and $na.Online -eq 'Offline' -and $gui.C.ServerStats.Text -eq '[12:00]')

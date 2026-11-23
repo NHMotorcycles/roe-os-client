@@ -757,6 +757,12 @@ class ServerMenu(unittest.TestCase):
         states = 'OK 7,normal,1,0,0,EU%20SERVER,up 5,normal,2,1,0,NA%20SERVER,down 6,duel,0,0,0,AS%20SERVER,later'
         self.assertEqual(join.format_stats(states), 'EU (normal): 1 online, 0 searching, 0 matches | NA (normal): offline | '
                                                     'AS (duel): 0 online, 0 searching, 0 matches')
+        # The searching players per mode (the field after the state): in the game's order, FPP named,
+        # none, unknown or broken parts left out; "-" (nobody searching) shows no modes.
+        modes = 'OK 7,normal,9,6,1,EU%20SERVER,up,squad-fpp:1;solo-tpp:2;duo-tpp:0;arcade-tpp:5;solo-fpp:x;training-tpp:3 5,normal,0,0,0,NA%20SERVER,up,-'
+        self.assertEqual(join.format_stats(modes), 'EU (normal): 9 online, 6 searching (solo 2, squad FPP 1, training 3), 1 match | '
+                                                   'NA (normal): 0 online, 0 searching, 0 matches')
+        self.assertEqual(join.format_stats('OK 5,normal,2,1,0,NA%20SERVER,down,solo-tpp:1'), 'NA (normal): offline')
         # The line after the login and while the game runs: every region (the live server's reply),
         # INFO only from a server without STATS, INFO's restart notice either way.
         live = 'OK 7,normal,0,0,0,EU%20SERVER 6,duel,0,0,0,AS%20SERVER'
@@ -854,7 +860,7 @@ class JoinCmdAccounts(unittest.TestCase):
 class JoinCmdServers(unittest.TestCase):
     """join-roe-os.cmd's server menu, the servers list and -Server (through powershell.exe)."""
     def test_functions(self):
-        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 51)
+        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 52)
 
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
@@ -1151,7 +1157,7 @@ class JoinGui(unittest.TestCase):
         def prepare(base):
             (base / 'game').mkdir()
             (base / 'valid-voice.dll').write_bytes(fake_dll(b'GetVoiceEngine UI test'))
-        run_powershell(self, 'join_gui.ps1', prepare, 51)
+        run_powershell(self, 'join_gui.ps1', prepare, 53)
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')
