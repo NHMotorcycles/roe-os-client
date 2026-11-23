@@ -1150,7 +1150,8 @@ class JoinGui(unittest.TestCase):
     def test_functions(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui.ps1', prepare, 43)
+            (base / 'valid-voice.dll').write_bytes(fake_dll(b'GetVoiceEngine UI test'))
+        run_powershell(self, 'join_gui.ps1', prepare, 51)
 
 
 @unittest.skipUnless(shutil.which('cmd.exe') and shutil.which('wslpath'), 'needs cmd.exe (WSL)')

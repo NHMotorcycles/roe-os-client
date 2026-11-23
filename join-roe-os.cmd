@@ -1869,7 +1869,7 @@ function Invoke-PlayJob([string]$Client, [string]$Server, [string]$Token, [strin
         if ($info -match '^OK ') { Send-GuiEvent 'stats' ((Format-ServerNow $info $stats) -replace ' \| ', "`n") }
     }
     $game = Start-Game $client $login.Uid $serverIp $voicePick
-    Send-GuiEvent 'game' $true
+    Send-GuiEvent 'game' $game.VoiceOn
     try {
         # While the game runs: the server's numbers every 30 s.
         while (-not $game.Process.WaitForExit(30000)) {
@@ -1934,112 +1934,948 @@ function Get-GuiVoiceDll {
 }
 
 # --- The window --------------------------------------------------------------------------------
-function Get-GuiXaml {
-    return @'
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ring of Elysium 2022: join a server" Width="560" SizeToContent="Height"
-        ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen">
-  <Window.Resources>
-    <Style TargetType="Button">
-      <Setter Property="Padding" Value="10,3"/>
-      <Setter Property="MinWidth" Value="90"/>
-    </Style>
-    <Style TargetType="TextBlock" x:Key="Heading">
-      <Setter Property="FontWeight" Value="Bold"/>
-      <Setter Property="Margin" Value="0,12,0,4"/>
-    </Style>
-    <!-- The text next to a check box: only the box itself toggles it. -->
-    <Style TargetType="TextBlock" x:Key="CheckLabel">
-      <Setter Property="Margin" Value="5,0,0,0"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="TextWrapping" Value="Wrap"/>
+# UI strings are loaded once, on the window thread. The catalog uses ASCII JSON escapes
+# so the batch/PowerShell file also works with legacy Windows code pages.
+function Get-GuiLanguages {
+    return (ConvertFrom-Json @'
+{
+  "en": {
+  "Native": "English",
+  "Language": "Language",
+  "Edition": "2022 edition",
+  "Subtitle": "Multiplayer launcher",
+  "Server": "Server",
+  "AddServer": "Add server...",
+  "Account": "Account",
+  "NewAccount": "Create a new account",
+  "GameFolder": "Game folder",
+  "Browse": "Browse...",
+  "Voice": "Voice chat",
+  "ChooseFolder": "Choose folder...",
+  "Advanced": "Advanced settings",
+  "Details": "Details",
+  "HideDetails": "Hide details",
+  "Region": "Region",
+  "Online": "Online",
+  "Queued": "In queue",
+  "Games": "Matches",
+  "Offline": "Offline",
+  "ServerStatus": "Server status",
+  "Play": "Play",
+  "Running": "Game running",
+  "Joining": "Joining...",
+  "Ready": "Choose the server and the account, then Play.",
+  "FwOn": "Enable firewall rules",
+  "FwOff": "Disable firewall rules",
+  "FwReset": "Reset all rules",
+  "FwShow": "Show rules",
+  "Export": "Export accounts...",
+  "Import": "Import accounts...",
+  "Log": "Open log",
+  "Admin": "Open admin page",
+  "BackupHelp": "Export your account keys to use them on another PC. Keep the backup private.",
+  "AdminHelp": "This account can manage bots, matchmaking and server status in the browser.",
+  "Cancel": "Cancel",
+  "Ok": "OK",
+  "Address": "Server address (IP or domain)",
+  "AddressHelp": "Enter the address from the server host, for example play.example.org.",
+  "PlayerName": "Your name (1 to 24 characters)",
+  "VoiceOff": "Off",
+  "VoiceFileMissing": "DLL missing",
+  "VoiceFileInvalid": "DLL unavailable",
+  "VoiceAvailable": "Ready",
+  "VoiceActive": "Active in game",
+  "VoiceSessionOff": "Off for this game",
+  "VoiceMissing": "Choose the folder containing {0}, or download it from {1}.",
+  "VoiceReady": "The game uses {0} while running. The original file is restored afterwards.",
+  "VoiceProblem": "{0} Choose the folder containing the voice file.",
+  "LocateGame": "Choose your Ring of Elysium folder in Steam. Select DirectX 12 to use the XVersion folder.",
+  "Dx11": "DirectX 11 version.",
+  "Dx12": "DirectX 12 \u00b7 {0}",
+  "FirewallPending": "Firewall rules will be offered the first time you play.",
+  "FirewallOn": "Firewall rules are on.",
+  "FirewallOff": "Firewall rules are off.",
+  "FirewallHelp": "These rules restrict the game to trusted servers. Changing the allowed addresses requires administrator approval.",
+  "AskFirewall": "Restrict the game to this PC and the servers you join? The game also tries to contact the publisher's old servers. Updating these Windows Firewall rules requires administrator approval. You can change this setting in Advanced settings.",
+  "ResetConfirm": "Remove the firewall rules created by this launcher and the server launcher for all game folders? If firewall rules are enabled, this launcher will request new rules the next time you join.",
+  "WithoutVoice": "Play without voice chat this time?",
+  "CloseConfirm": "The launcher is joining or waiting for the game to exit. Close it anyway? If needed, the original voice file will be restored next time.",
+  "Contacting": "Contacting {0}...",
+  "AddFirst": "Add a server using its IP address or domain.",
+  "VoiceFolder": "Choose the folder containing {0}.",
+  "AllFiles": "All files",
+  "Backup": "Account backup",
+  "Checking": "Checking the game in {0}...",
+  "FolderVerified": "Game folder: {0} (verified).",
+  "ConnectTo": "Joining {0}...",
+  "GameExited": "The game has exited.",
+  "JoinFailed": "Could not join: {0}",
+  "BadAddress": "Invalid IP address or domain: {0}",
+  "VoicePath": "Voice file: {0}",
+  "NoServerInfo": "No response from the account service. The server may be offline or may accept just a player name."
+},
+  "da": {
+  "Native": "Dansk",
+  "Language": "Sprog",
+  "Edition": "2022-udgave",
+  "Subtitle": "Multiplayer-launcher",
+  "Server": "Server",
+  "AddServer": "Tilf\u00f8j server...",
+  "Account": "Konto",
+  "NewAccount": "Opret en ny konto",
+  "GameFolder": "Spilmappe",
+  "Browse": "Gennemse...",
+  "Voice": "Stemmechat",
+  "ChooseFolder": "V\u00e6lg mappe...",
+  "Advanced": "Avancerede indstillinger",
+  "Details": "Detaljer",
+  "HideDetails": "Skjul detaljer",
+  "Region": "Region",
+  "Online": "Online",
+  "Queued": "I k\u00f8",
+  "Games": "Kampe",
+  "Offline": "Offline",
+  "ServerStatus": "Serverstatus",
+  "Play": "Spil",
+  "Running": "Spillet k\u00f8rer",
+  "Joining": "Tilslutter...",
+  "Ready": "V\u00e6lg server og konto, og tryk p\u00e5 Spil.",
+  "FwOn": "Aktiv\u00e9r firewallregler",
+  "FwOff": "Deaktiv\u00e9r firewallregler",
+  "FwReset": "Nulstil alle regler",
+  "FwShow": "Vis regler",
+  "Export": "Eksport\u00e9r konti...",
+  "Import": "Import\u00e9r konti...",
+  "Log": "\u00c5bn log",
+  "Admin": "\u00c5bn adminsiden",
+  "BackupHelp": "Eksport\u00e9r dine konton\u00f8gler for at bruge dem p\u00e5 en anden pc. Hold sikkerhedskopien privat.",
+  "AdminHelp": "Denne konto kan administrere bots, matchmaking og serverstatus i browseren.",
+  "Cancel": "Annuller",
+  "Ok": "OK",
+  "Address": "Serveradresse (IP eller dom\u00e6ne)",
+  "AddressHelp": "Indtast adressen fra serverens v\u00e6rt, fx play.example.org.",
+  "PlayerName": "Dit navn (1 til 24 tegn)",
+  "VoiceOff": "Sl\u00e5et fra",
+  "VoiceFileMissing": "DLL mangler",
+  "VoiceFileInvalid": "DLL kan ikke bruges",
+  "VoiceAvailable": "Klar",
+  "VoiceActive": "Aktiv i spillet",
+  "VoiceSessionOff": "Fra i dette spil",
+  "VoiceMissing": "V\u00e6lg mappen med {0}, eller hent filen fra {1}.",
+  "VoiceReady": "Spillet bruger {0}, mens det k\u00f8rer. Den originale fil gendannes bagefter.",
+  "VoiceProblem": "{0} V\u00e6lg mappen med stemmechatfilen.",
+  "LocateGame": "V\u00e6lg din Ring of Elysium-mappe i Steam. V\u00e6lg DirectX 12 for at bruge XVersion-mappen.",
+  "Dx11": "DirectX 11-versionen.",
+  "Dx12": "DirectX 12 \u00b7 {0}",
+  "FirewallPending": "Du bliver spurgt om firewallregler f\u00f8rste gang, du spiller.",
+  "FirewallOn": "Firewallregler er sl\u00e5et til.",
+  "FirewallOff": "Firewallregler er sl\u00e5et fra.",
+  "FirewallHelp": "Reglerne begr\u00e6nser spillets adgang til betroede servere. \u00c6ndring af de tilladte adresser kr\u00e6ver administratorgodkendelse.",
+  "AskFirewall": "M\u00e5 spillet kun oprette forbindelse til denne pc og de servere, du spiller p\u00e5? Spillet fors\u00f8ger ogs\u00e5 at kontakte udgiverens gamle servere. \u00c6ndringer af reglerne i Windows Firewall kr\u00e6ver administratorgodkendelse. Du kan \u00e6ndre valget under Avancerede indstillinger.",
+  "ResetConfirm": "Vil du fjerne de firewallregler, som denne launcher og serverlauncheren har oprettet for alle spilmapper? Hvis firewallregler er sl\u00e5et til, vil denne launcher anmode om nye regler, n\u00e6ste gang du forbinder til en server.",
+  "WithoutVoice": "Vil du spille uden stemmechat denne gang?",
+  "CloseConfirm": "Launcheren opretter forbindelse eller venter p\u00e5, at spillet lukker. Vil du lukke alligevel? Den originale stemmechatfil gendannes om n\u00f8dvendigt n\u00e6ste gang.",
+  "Contacting": "Kontakter {0}...",
+  "AddFirst": "Tilf\u00f8j en server med dens IP-adresse eller dom\u00e6ne.",
+  "VoiceFolder": "V\u00e6lg mappen med {0}.",
+  "AllFiles": "Alle filer",
+  "Backup": "Kontosikkerhedskopi",
+  "Checking": "Tjekker spillet i {0}...",
+  "FolderVerified": "Spilmappe: {0} (kontrolleret).",
+  "ConnectTo": "Opretter forbindelse til {0}...",
+  "GameExited": "Spillet er lukket.",
+  "JoinFailed": "Kunne ikke oprette forbindelse: {0}",
+  "BadAddress": "Ugyldig IP-adresse eller dom\u00e6ne: {0}",
+  "VoicePath": "Stemmechatfil: {0}",
+  "NoServerInfo": "Intet svar fra kontotjenesten. Serveren kan v\u00e6re offline eller n\u00f8jes med et spillernavn."
+},
+  "de": {
+  "Native": "Deutsch",
+  "Language": "Sprache",
+  "Edition": "Ausgabe 2022",
+  "Subtitle": "Multiplayer-Launcher",
+  "Server": "Server",
+  "AddServer": "Server hinzuf\u00fcgen...",
+  "Account": "Konto",
+  "NewAccount": "Neues Konto erstellen",
+  "GameFolder": "Spielordner",
+  "Browse": "Durchsuchen...",
+  "Voice": "Sprachchat",
+  "ChooseFolder": "Ordner w\u00e4hlen...",
+  "Advanced": "Erweiterte Einstellungen",
+  "Details": "Details",
+  "HideDetails": "Details ausblenden",
+  "Region": "Region",
+  "Online": "Online",
+  "Queued": "In Warteschlange",
+  "Games": "Matches",
+  "Offline": "Offline",
+  "ServerStatus": "Serverstatus",
+  "Play": "Spielen",
+  "Running": "Spiel l\u00e4uft",
+  "Joining": "Verbinden...",
+  "Ready": "Server und Konto w\u00e4hlen, dann auf Spielen klicken.",
+  "FwOn": "Firewallregeln aktivieren",
+  "FwOff": "Firewallregeln deaktivieren",
+  "FwReset": "Alle Regeln zur\u00fccksetzen",
+  "FwShow": "Regeln anzeigen",
+  "Export": "Konten exportieren...",
+  "Import": "Konten importieren...",
+  "Log": "Protokoll \u00f6ffnen",
+  "Admin": "Adminseite \u00f6ffnen",
+  "BackupHelp": "Exportiere deine Kontoschl\u00fcssel f\u00fcr einen anderen PC. Bewahre die Sicherung vertraulich auf.",
+  "AdminHelp": "Mit diesem Konto kannst du Bots, Matchmaking und Serverstatus im Browser verwalten.",
+  "Cancel": "Abbrechen",
+  "Ok": "OK",
+  "Address": "Serveradresse (IP oder Domain)",
+  "AddressHelp": "Gib die Adresse des Serverbetreibers ein, z. B. play.example.org.",
+  "PlayerName": "Dein Name (1 bis 24 Zeichen)",
+  "VoiceOff": "Aus",
+  "VoiceFileMissing": "DLL fehlt",
+  "VoiceFileInvalid": "DLL nicht verwendbar",
+  "VoiceAvailable": "Bereit",
+  "VoiceActive": "Im Spiel aktiv",
+  "VoiceSessionOff": "F\u00fcr dieses Spiel aus",
+  "VoiceMissing": "W\u00e4hle den Ordner mit {0} oder lade die Datei hier herunter: {1}.",
+  "VoiceReady": "Das Spiel nutzt {0}, solange es l\u00e4uft. Danach wird die Originaldatei wiederhergestellt.",
+  "VoiceProblem": "{0} W\u00e4hle den Ordner mit der Sprachdatei.",
+  "LocateGame": "W\u00e4hle den Ring-of-Elysium-Ordner in Steam. Aktiviere DirectX 12 f\u00fcr den XVersion-Ordner.",
+  "Dx11": "DirectX-11-Version.",
+  "Dx12": "DirectX 12 \u00b7 {0}",
+  "FirewallPending": "Beim ersten Spielstart wirst du nach Firewallregeln gefragt.",
+  "FirewallOn": "Firewallregeln sind aktiviert.",
+  "FirewallOff": "Firewallregeln sind deaktiviert.",
+  "FirewallHelp": "Die Regeln beschr\u00e4nken das Spiel auf vertrauensw\u00fcrdige Server. F\u00fcr \u00c4nderungen an den erlaubten Adressen sind Administratorrechte n\u00f6tig.",
+  "AskFirewall": "Soll das Spiel nur diesen PC und die Server erreichen k\u00f6nnen, auf denen du spielst? Das Spiel versucht auch, die alten Server des Herausgebers zu kontaktieren. \u00c4nderungen an diesen Windows-Firewallregeln erfordern Administratorrechte. Du kannst die Option in den erweiterten Einstellungen \u00e4ndern.",
+  "ResetConfirm": "Die Firewallregeln entfernen, die dieser Launcher und der Server-Launcher f\u00fcr alle Spielordner erstellt haben? Wenn die Firewallregeln aktiviert sind, fordert dieser Launcher beim n\u00e4chsten Verbindungsaufbau neue Regeln an.",
+  "WithoutVoice": "Diesmal ohne Sprachchat spielen?",
+  "CloseConfirm": "Der Launcher verbindet sich oder wartet auf das Spielende. Trotzdem schlie\u00dfen? Die urspr\u00fcngliche Sprachdatei wird bei Bedarf beim n\u00e4chsten Start wiederhergestellt.",
+  "Contacting": "Verbinde mit {0}...",
+  "AddFirst": "F\u00fcge einen Server \u00fcber seine IP-Adresse oder Domain hinzu.",
+  "VoiceFolder": "W\u00e4hle den Ordner mit {0}.",
+  "AllFiles": "Alle Dateien",
+  "Backup": "Kontosicherung",
+  "Checking": "Spiel in {0} wird gepr\u00fcft...",
+  "FolderVerified": "Spielordner: {0} (gepr\u00fcft).",
+  "ConnectTo": "Verbindung mit {0} wird hergestellt...",
+  "GameExited": "Das Spiel wurde beendet.",
+  "JoinFailed": "Verbindung fehlgeschlagen: {0}",
+  "BadAddress": "Ung\u00fcltige IP-Adresse oder Domain: {0}",
+  "VoicePath": "Sprachdatei: {0}",
+  "NoServerInfo": "Keine Antwort vom Kontodienst. Der Server ist eventuell offline oder akzeptiert nur einen Spielernamen."
+},
+  "fr": {
+  "Native": "Fran\u00e7ais",
+  "Language": "Langue",
+  "Edition": "\u00c9dition 2022",
+  "Subtitle": "Lanceur multijoueur",
+  "Server": "Serveur",
+  "AddServer": "Ajouter un serveur...",
+  "Account": "Compte",
+  "NewAccount": "Cr\u00e9er un compte",
+  "GameFolder": "Dossier du jeu",
+  "Browse": "Parcourir...",
+  "Voice": "Chat vocal",
+  "ChooseFolder": "Choisir un dossier...",
+  "Advanced": "Param\u00e8tres avanc\u00e9s",
+  "Details": "D\u00e9tails",
+  "HideDetails": "Masquer les d\u00e9tails",
+  "Region": "R\u00e9gion",
+  "Online": "En ligne",
+  "Queued": "En attente",
+  "Games": "Parties",
+  "Offline": "Hors ligne",
+  "ServerStatus": "\u00c9tat du serveur",
+  "Play": "Jouer",
+  "Running": "Jeu en cours",
+  "Joining": "Connexion...",
+  "Ready": "Choisissez le serveur et le compte, puis cliquez sur Jouer.",
+  "FwOn": "Activer les r\u00e8gles",
+  "FwOff": "D\u00e9sactiver les r\u00e8gles",
+  "FwReset": "R\u00e9initialiser les r\u00e8gles",
+  "FwShow": "Afficher les r\u00e8gles",
+  "Export": "Exporter les comptes...",
+  "Import": "Importer les comptes...",
+  "Log": "Ouvrir le journal",
+  "Admin": "Ouvrir l\u2019administration",
+  "BackupHelp": "Exportez les cl\u00e9s de vos comptes pour les utiliser sur un autre PC. Gardez cette sauvegarde priv\u00e9e.",
+  "AdminHelp": "Ce compte peut g\u00e9rer les bots, le matchmaking et l\u2019\u00e9tat du serveur dans le navigateur.",
+  "Cancel": "Annuler",
+  "Ok": "OK",
+  "Address": "Adresse du serveur (IP ou domaine)",
+  "AddressHelp": "Saisissez l\u2019adresse fournie par l\u2019h\u00f4te, par exemple play.example.org.",
+  "PlayerName": "Votre nom (1 \u00e0 24 caract\u00e8res)",
+  "VoiceOff": "D\u00e9sactiv\u00e9",
+  "VoiceFileMissing": "DLL introuvable",
+  "VoiceFileInvalid": "DLL inutilisable",
+  "VoiceAvailable": "Pr\u00eat",
+  "VoiceActive": "Actif en jeu",
+  "VoiceSessionOff": "D\u00e9sactiv\u00e9 pour cette partie",
+  "VoiceMissing": "Choisissez le dossier contenant {0} ou t\u00e9l\u00e9chargez le fichier depuis {1}.",
+  "VoiceReady": "Le jeu utilise {0} pendant la partie. Le fichier d\u2019origine est ensuite restaur\u00e9.",
+  "VoiceProblem": "{0} Choisissez le dossier du fichier vocal.",
+  "LocateGame": "Choisissez le dossier Ring of Elysium de Steam. Cochez DirectX 12 pour utiliser le dossier XVersion.",
+  "Dx11": "Version DirectX 11.",
+  "Dx12": "DirectX 12 \u00b7 {0}",
+  "FirewallPending": "Les r\u00e8gles du pare-feu seront propos\u00e9es au premier lancement.",
+  "FirewallOn": "Les r\u00e8gles du pare-feu sont activ\u00e9es.",
+  "FirewallOff": "Les r\u00e8gles du pare-feu sont d\u00e9sactiv\u00e9es.",
+  "FirewallHelp": "Ces r\u00e8gles limitent le jeu aux serveurs de confiance. Modifier les adresses autoris\u00e9es n\u00e9cessite des droits administrateur.",
+  "AskFirewall": "Limiter les connexions du jeu \u00e0 ce PC et aux serveurs que vous rejoignez ? Le jeu tente aussi de contacter les anciens serveurs de l\u2019\u00e9diteur. La modification de ces r\u00e8gles du pare-feu Windows n\u00e9cessite des droits administrateur. Vous pouvez changer cette option dans les param\u00e8tres avanc\u00e9s.",
+  "ResetConfirm": "Supprimer les r\u00e8gles de pare-feu cr\u00e9\u00e9es par ce lanceur et par le lanceur du serveur pour tous les dossiers du jeu ? Si les r\u00e8gles sont activ\u00e9es, ce lanceur demandera de nouvelles r\u00e8gles \u00e0 la prochaine connexion.",
+  "WithoutVoice": "Jouer sans chat vocal cette fois-ci ?",
+  "CloseConfirm": "Le lanceur se connecte ou attend la fermeture du jeu. Le fermer ? Le fichier vocal d\u2019origine sera restaur\u00e9 au prochain lancement si n\u00e9cessaire.",
+  "Contacting": "Connexion \u00e0 {0}...",
+  "AddFirst": "Ajoutez un serveur avec son adresse IP ou son domaine.",
+  "VoiceFolder": "Choisissez le dossier contenant {0}.",
+  "AllFiles": "Tous les fichiers",
+  "Backup": "Sauvegarde des comptes",
+  "Checking": "V\u00e9rification du jeu dans {0}...",
+  "FolderVerified": "Dossier du jeu : {0} (v\u00e9rifi\u00e9).",
+  "ConnectTo": "Connexion \u00e0 {0}...",
+  "GameExited": "Le jeu est ferm\u00e9.",
+  "JoinFailed": "\u00c9chec de la connexion : {0}",
+  "BadAddress": "Adresse IP ou domaine non valide : {0}",
+  "VoicePath": "Fichier vocal : {0}",
+  "NoServerInfo": "Le service de comptes ne r\u00e9pond pas. Le serveur est peut-\u00eatre hors ligne ou accepte un simple nom de joueur."
+},
+  "es": {
+  "Native": "Espa\u00f1ol",
+  "Language": "Idioma",
+  "Edition": "Edici\u00f3n 2022",
+  "Subtitle": "Lanzador multijugador",
+  "Server": "Servidor",
+  "AddServer": "A\u00f1adir servidor...",
+  "Account": "Cuenta",
+  "NewAccount": "Crear una cuenta",
+  "GameFolder": "Carpeta del juego",
+  "Browse": "Examinar...",
+  "Voice": "Chat de voz",
+  "ChooseFolder": "Elegir carpeta...",
+  "Advanced": "Ajustes avanzados",
+  "Details": "Detalles",
+  "HideDetails": "Ocultar detalles",
+  "Region": "Regi\u00f3n",
+  "Online": "En l\u00ednea",
+  "Queued": "En cola",
+  "Games": "Partidas",
+  "Offline": "Sin conexi\u00f3n",
+  "ServerStatus": "Estado del servidor",
+  "Play": "Jugar",
+  "Running": "Juego en curso",
+  "Joining": "Conectando...",
+  "Ready": "Elige el servidor y la cuenta y pulsa Jugar.",
+  "FwOn": "Activar reglas",
+  "FwOff": "Desactivar reglas",
+  "FwReset": "Restablecer reglas",
+  "FwShow": "Ver reglas",
+  "Export": "Exportar cuentas...",
+  "Import": "Importar cuentas...",
+  "Log": "Abrir registro",
+  "Admin": "Abrir administraci\u00f3n",
+  "BackupHelp": "Exporta las claves de tus cuentas para usarlas en otro PC. Guarda la copia en privado.",
+  "AdminHelp": "Esta cuenta puede gestionar los bots, el emparejamiento y el estado del servidor desde el navegador.",
+  "Cancel": "Cancelar",
+  "Ok": "Aceptar",
+  "Address": "Direcci\u00f3n del servidor (IP o dominio)",
+  "AddressHelp": "Introduce la direcci\u00f3n del administrador, por ejemplo play.example.org.",
+  "PlayerName": "Tu nombre (de 1 a 24 caracteres)",
+  "VoiceOff": "Desactivado",
+  "VoiceFileMissing": "Falta la DLL",
+  "VoiceFileInvalid": "DLL no v\u00e1lida",
+  "VoiceAvailable": "Listo",
+  "VoiceActive": "Activo en el juego",
+  "VoiceSessionOff": "Desactivado en esta partida",
+  "VoiceMissing": "Elige la carpeta que contiene {0} o descarga el archivo desde {1}.",
+  "VoiceReady": "El juego usa {0} mientras se ejecuta. Despu\u00e9s se restaura el archivo original.",
+  "VoiceProblem": "{0} Elige la carpeta del archivo de voz.",
+  "LocateGame": "Elige la carpeta de Ring of Elysium en Steam. Marca DirectX 12 para usar la carpeta XVersion.",
+  "Dx11": "Versi\u00f3n de DirectX 11.",
+  "Dx12": "DirectX 12 \u00b7 {0}",
+  "FirewallPending": "Se te preguntar\u00e1 por las reglas del cortafuegos al jugar por primera vez.",
+  "FirewallOn": "Las reglas del cortafuegos est\u00e1n activadas.",
+  "FirewallOff": "Las reglas del cortafuegos est\u00e1n desactivadas.",
+  "FirewallHelp": "Las reglas limitan el juego a servidores de confianza. Cambiar las direcciones permitidas requiere permisos de administrador.",
+  "AskFirewall": "\u00bfLimitar las conexiones del juego a este PC y a los servidores en los que juegas? El juego tambi\u00e9n intenta conectarse a los antiguos servidores del editor. Cambiar estas reglas del Firewall de Windows requiere permisos de administrador. Puedes cambiar esta opci\u00f3n en Ajustes avanzados.",
+  "ResetConfirm": "\u00bfEliminar las reglas del cortafuegos que han creado este lanzador y el del servidor para todas las carpetas del juego? Si las reglas est\u00e1n activadas, este lanzador solicitar\u00e1 nuevas reglas la pr\u00f3xima vez que te conectes.",
+  "WithoutVoice": "\u00bfJugar sin chat de voz esta vez?",
+  "CloseConfirm": "El lanzador se est\u00e1 conectando o espera a que termine el juego. \u00bfCerrarlo de todos modos? El archivo de voz original se restaurar\u00e1 la pr\u00f3xima vez si es necesario.",
+  "Contacting": "Conectando con {0}...",
+  "AddFirst": "A\u00f1ade un servidor con su direcci\u00f3n IP o dominio.",
+  "VoiceFolder": "Elige la carpeta que contiene {0}.",
+  "AllFiles": "Todos los archivos",
+  "Backup": "Copia de cuentas",
+  "Checking": "Comprobando el juego en {0}...",
+  "FolderVerified": "Carpeta del juego: {0} (verificada).",
+  "ConnectTo": "Conectando con {0}...",
+  "GameExited": "El juego se ha cerrado.",
+  "JoinFailed": "No se pudo conectar: {0}",
+  "BadAddress": "Direcci\u00f3n IP o dominio no v\u00e1lido: {0}",
+  "VoicePath": "Archivo de voz: {0}",
+  "NoServerInfo": "El servicio de cuentas no responde. El servidor puede estar desconectado o aceptar solo un nombre de jugador."
+}
+}
+'@
+    )
+}
+function Set-GuiTextResources($Window) {
+    foreach ($entry in $gui.Strings.PSObject.Properties) {
+        $Window.Resources['Ui.' + $entry.Name] = [string]$entry.Value
+    }
+}
+function Set-GuiNote($Control, [string]$Key, [string]$Level = 'info', [object[]]$Values = @()) {
+    $format = $gui.Strings.$Key
+    if ($Key -eq 'VoiceMissing') {
+        # Keep the link at the position chosen by the translation.
+        $parts = $format -split '\{1\}', 2
+        $link = [Windows.Documents.Hyperlink]::new([Windows.Documents.Run]::new('GitHub'))
+        $link.NavigateUri = [uri]$voiceDownload
+        $link.ToolTip = $link.NavigateUri.AbsoluteUri
+        $link.Foreground = $gui.Window.FindResource('Link')
+        $link.Add_Click({
+            try { Start-Process -FilePath $this.NavigateUri.AbsoluteUri }
+            catch { Show-GuiError $_ }
+        })
+        $Control.Inlines.Clear()
+        $Control.Inlines.Add([Windows.Documents.Run]::new(($parts[0] -f $Values)))
+        $Control.Inlines.Add($link)
+        $Control.Inlines.Add([Windows.Documents.Run]::new(($parts[1] -f $Values)))
+        $Control.Foreground = Get-Brush $Level
+    } else {
+        Set-Text $Control ($format -f $Values) $Level
+    }
+    $Control.Tag = @{ Key = $Key; Level = $Level; Values = $Values }
+}
+function Set-GuiLanguage([string]$Code) {
+    $gui.Strings = $gui.Languages.$Code
+    Set-GuiTextResources $gui.Window
+
+    $account = $gui.C.AccountBox
+    if ($account.Items.Count) {
+        # The last item creates an account. Keep the selected account and its server session.
+        $selected = $account.SelectedIndex
+        $updating = $gui.Updating
+        $gui.Updating = $true
+        try {
+            $account.Items[$account.Items.Count - 1] = $gui.Strings.NewAccount
+            $account.SelectedIndex = $selected
+        } finally { $gui.Updating = $updating }
+    }
+    Update-Controls
+    foreach ($control in @($gui.C.GameNote, $gui.C.VoiceStatus, $gui.C.VoiceNote, $gui.C.StatusText)) {
+        $note = $control.Tag
+        if ($note) { Set-GuiNote $control $note.Key $note.Level $note.Values }
+    }
+    if ($gui.LastStats) { Set-GuiServerStatus $gui.LastStats.Text $gui.LastStats.Level }
+    if ($gui.FirewallState) { $gui.C.FirewallText.Text = $gui.Strings.($gui.FirewallState) + ' ' + $gui.Strings.FirewallHelp }
+}
+function Initialize-GuiLanguage {
+    $gui.Languages = Get-GuiLanguages
+    $gui.LanguageFile = Join-Path $joinRoot 'ui-language.txt'
+    $preferred = [Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName
+    if (Test-Path -LiteralPath $gui.LanguageFile -PathType Leaf) {
+        try { $saved = [IO.File]::ReadAllText($gui.LanguageFile).Trim(); if ($gui.Languages.PSObject.Properties[$saved]) { $preferred = $saved } } catch { }
+    }
+    $codes = @($gui.Languages.PSObject.Properties.Name)
+    if ($preferred -notin $codes) { $preferred = 'en' }
+    $box = $gui.C.LanguageBox
+    foreach ($code in $codes) { [void]$box.Items.Add($gui.Languages.$code.Native) }
+    $box.SelectedIndex = [array]::IndexOf($codes, $preferred)
+    Set-GuiLanguage $preferred
+    $box.Add_SelectionChanged({
+        $index = $gui.C.LanguageBox.SelectedIndex
+        if ($index -lt 0) { return }
+        $code = @($gui.Languages.PSObject.Properties.Name)[$index]
+        Set-GuiLanguage $code
+        try {
+            [void][IO.Directory]::CreateDirectory($joinRoot)
+            [IO.File]::WriteAllText($gui.LanguageFile, $code)
+        } catch { Write-GuiLog "Could not save the launcher language: $_" }
+    })
+}
+
+function New-GuiWindow([string]$Xaml) {
+    $window = [Windows.Markup.XamlReader]::Parse($Xaml)
+    $window.Icon = $window.FindResource('LauncherIcon')
+    return $window
+}
+# Each role pairs the launcher's color with the user's Windows contrast color.
+function Get-GuiPalette([bool]$HighContrast) {
+    $colors = [ordered]@{
+        Ink = '#F2F0EC', 'WindowText'
+        Secondary = '#BCB9B2', 'WindowText'
+        Canvas = '#141414', 'Window'
+        Panel = '#282828', 'Window'
+        Field = '#202020', 'Window'
+        IconBackground = '#292724', 'Window'
+        Line = '#494949', 'WindowText'
+        Accent = '#EDC366', 'WindowText'
+        OnAccent = '#211A0B', 'Window'
+        Hover = '#363636', 'Window'
+        Pressed = '#414141', 'Window'
+        Action = '#FF983F', 'Highlight'
+        ActionText = '#201307', 'HighlightText'
+        ActionHover = '#FFB065', 'Highlight'
+        ActionPressed = '#DD792B', 'Highlight'
+        Focus = '#FFF0C8', 'WindowText'
+        Selection = '#805B26', 'Highlight'
+        SelectedRow = '#493B26', 'Highlight'
+        HighlightedRow = '#51422A', 'Highlight'
+        SelectedText = '#F2F0EC', 'HighlightText'
+        HoverLine = '#A59A86', 'WindowText'
+        CheckOutline = '#888888', 'WindowText'
+        MastheadLine = '#514737', 'WindowText'
+        Subtitle = '#D2CFC8', 'WindowText'
+        Badge = '#3F3726', 'Window'
+        BadgeText = '#E9CC8D', 'WindowText'
+        Title = '#F4CD7A', 'WindowText'
+        LanguageLabel = '#C1BDB6', 'WindowText'
+        TableHeader = '#303030', 'Window'
+        TableHeading = '#E9C67C', 'WindowText'
+        TableRow = '#232323', 'Window'
+        TableLine = '#363636', 'WindowText'
+        Available = '#E6B954', 'WindowText'
+        Unavailable = '#858585', 'GrayText'
+        Divider = '#353535', 'WindowText'
+        Footer = '#1D1D1D', 'Window'
+        Warning = '#FFBB75', 'WindowText'
+        Error = '#FFA58A', 'WindowText'
+        Link = '#EDC366', 'HotTrack'
+    }
+    foreach ($role in $colors.Keys) {
+        $theme, $system = $colors[$role]
+        $color = if ($HighContrast) { "{x:Static SystemColors.${system}Color}" } else { $theme }
+        '<SolidColorBrush x:Key="{0}" Color="{1}"/>' -f $role, $color
+    }
+}
+function Get-GuiTheme([bool]$HighContrast) {
+    return @"
+$((Get-GuiPalette $HighContrast) -join "`n")
+    <DrawingImage x:Key="LauncherIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="{StaticResource IconBackground}">
+            <GeometryDrawing.Geometry><RectangleGeometry Rect="0,0,32,32" RadiusX="5" RadiusY="5"/></GeometryDrawing.Geometry>
+          </GeometryDrawing>
+          <GeometryDrawing Brush="{StaticResource Accent}" Geometry="F0 M6,6 L21,6 26,11 26,15 20,20 12,20 12,26 6,26 Z M12,11 L19,11 21,13 19,15 12,15 Z"/>
+          <GeometryDrawing Brush="{StaticResource Action}" Geometry="M15,21 L22,21 27,26 20,26 Z"/>
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <Style x:Key="LauncherButton" TargetType="ButtonBase">
+      <Setter Property="Background" Value="{StaticResource Panel}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="13,6"/>
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ButtonBase">
+            <Border CornerRadius="5" Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                    Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
       <Style.Triggers>
-        <Trigger Property="IsEnabled" Value="False">
-          <Setter Property="Foreground" Value="{x:Static SystemColors.GrayTextBrush}"/>
-        </Trigger>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{StaticResource Hover}"/></Trigger>
+        <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="{StaticResource Pressed}"/></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
       </Style.Triggers>
     </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource LauncherButton}"/>
+    <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource LauncherButton}">
+      <Setter Property="Background" Value="{StaticResource Action}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Action}"/>
+      <Setter Property="Foreground" Value="{StaticResource ActionText}"/>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{StaticResource ActionHover}"/></Trigger>
+        <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="{StaticResource ActionPressed}"/></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Focus}"/></Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style TargetType="TextBox">
+          <Setter Property="Background" Value="{StaticResource Field}"/>
+          <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+          <Setter Property="CaretBrush" Value="{StaticResource Accent}"/>
+          <Setter Property="SelectionBrush" Value="{StaticResource Selection}"/>
+          <Setter Property="SelectionTextBrush" Value="{StaticResource SelectedText}"/>
+          <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+          <Setter Property="BorderThickness" Value="1"/>
+          <Setter Property="Padding" Value="10,6"/>
+          <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template"><Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border x:Name="Shell" CornerRadius="5" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+            <ScrollViewer x:Name="PART_ContentHost" Focusable="False"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Shell" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value></Setter>
+    </Style>
+"@
+}
+function Get-GuiXaml([bool]$HighContrast = [Windows.SystemParameters]::HighContrast) {
+    return @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ring of Elysium Launcher" Width="680" SizeToContent="Height" ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen"
+        MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
+        MaxWidth="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Width}"
+        Background="{DynamicResource Canvas}" Foreground="{DynamicResource Ink}" FontFamily="Segoe UI" FontSize="13"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+$(Get-GuiTheme $HighContrast)
+    <Style x:Key="DetailsToggle" TargetType="ToggleButton" BasedOn="{StaticResource LauncherButton}">
+      <Style.Triggers>
+        <Trigger Property="IsChecked" Value="True"><Setter Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Padding" Value="10,7"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
+        <Border x:Name="Row" Background="Transparent" Padding="{TemplateBinding Padding}" CornerRadius="3">
+          <ContentPresenter/>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="{StaticResource SelectedRow}"/><Setter Property="Foreground" Value="{StaticResource SelectedText}"/></Trigger>
+            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Row" Property="Background" Value="{StaticResource HighlightedRow}"/><Setter Property="Foreground" Value="{StaticResource SelectedText}"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="MinHeight" Value="36"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="MaxDropDownHeight" Value="260"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+        <Grid>
+          <ToggleButton Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+            <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+              <Border x:Name="Field" Background="{StaticResource Field}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="5"/>
+              <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource HoverLine}"/></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Field" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate></ToggleButton.Template>
+          </ToggleButton>
+          <TextBlock Margin="11,0,30,0" VerticalAlignment="Center" Text="{TemplateBinding SelectionBoxItem}" TextTrimming="CharacterEllipsis" IsHitTestVisible="False"/>
+          <Path Margin="0,0,12,0" VerticalAlignment="Center" HorizontalAlignment="Right" Stroke="{StaticResource Secondary}" StrokeThickness="1.4" Data="M0,0 L4,4 8,0" IsHitTestVisible="False"/>
+          <Border x:Name="FocusRing" BorderThickness="1" CornerRadius="5" IsHitTestVisible="False"/>
+          <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False">
+            <Border Background="{StaticResource Panel}" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxWidth="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Width}"
+                    MaxHeight="{TemplateBinding MaxDropDownHeight}" BorderThickness="1" BorderBrush="{StaticResource Line}" CornerRadius="5" Margin="0,3,0,0" Padding="3">
+              <ScrollViewer VerticalScrollBarVisibility="Auto" CanContentScroll="True"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+            </Border>
+          </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="FocusRing" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.50"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="CheckBox">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox">
+        <DockPanel Background="Transparent">
+          <Border x:Name="Box" Height="16" Width="16" CornerRadius="3" Background="{StaticResource Field}" BorderBrush="{StaticResource CheckOutline}" BorderThickness="1" VerticalAlignment="Center">
+            <Path x:Name="Tick" Visibility="Hidden" Data="M0,4 L3,7 9,0" StrokeThickness="1.7" Stroke="{StaticResource OnAccent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+        </DockPanel>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Tick" Property="Visibility" Value="Visible"/></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{StaticResource Accent}"/></Trigger>
+            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Focus}"/></Trigger>
+            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.50"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style TargetType="Expander">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Expander">
+        <StackPanel>
+          <ToggleButton HorizontalAlignment="Left" Content="{TemplateBinding Header}" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" FontWeight="SemiBold" Foreground="{StaticResource Secondary}">
+            <ToggleButton.FocusVisualStyle>
+              <Style TargetType="Control">
+                <Setter Property="Template"><Setter.Value>
+                  <ControlTemplate TargetType="Control">
+                    <Border Height="1" Margin="16,0,8,3" VerticalAlignment="Bottom" Background="{StaticResource Accent}"/>
+                  </ControlTemplate>
+                </Setter.Value></Setter>
+              </Style>
+            </ToggleButton.FocusVisualStyle>
+            <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+              <Border Padding="0,6,8,6" Background="Transparent">
+                <StackPanel Orientation="Horizontal">
+                  <Path x:Name="Arrow" Data="M0,0 L4,4 0,8" Stroke="{StaticResource Accent}" StrokeThickness="1.5" Margin="2,0,10,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"/>
+                  <ContentPresenter x:Name="Caption"/>
+                </StackPanel>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate></ToggleButton.Template>
+          </ToggleButton>
+          <ContentPresenter x:Name="Body" Visibility="Collapsed"/>
+        </StackPanel>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsExpanded" Value="True"><Setter TargetName="Body" Property="Visibility" Value="Visible"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="Label" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="0,0,0,7"/>
+    </Style>
   </Window.Resources>
-  <StackPanel Margin="14,4,14,14">
-    <TextBlock Style="{StaticResource Heading}" Text="Server"/>
-    <DockPanel>
-      <Button x:Name="AddServerButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Add server..."/>
-      <ComboBox x:Name="ServerBox"/>
-    </DockPanel>
-    <TextBlock x:Name="ServerStats" Margin="0,4,0,0" TextWrapping="Wrap"/>
-    <TextBlock Style="{StaticResource Heading}" Text="Account"/>
-    <ComboBox x:Name="AccountBox"/>
-    <TextBlock Style="{StaticResource Heading}" Text="Game folder"/>
-    <DockPanel>
-      <Button x:Name="BrowseButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Browse..."/>
-      <CheckBox x:Name="Dx12Box" DockPanel.Dock="Right" Margin="8,0,2,0" VerticalAlignment="Center" Content="DirectX 12"/>
-      <TextBox x:Name="GameBox" IsReadOnly="True" VerticalContentAlignment="Center"/>
-    </DockPanel>
-    <TextBlock x:Name="GameNote" Margin="0,4,0,0" TextWrapping="Wrap"/>
-    <DockPanel Margin="0,14,0,0">
-      <Button x:Name="VoiceButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="Choose folder..."/>
-      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-        <CheckBox x:Name="VoiceBox" VerticalAlignment="Center" AutomationProperties.Name="Voice chat"/>
-        <TextBlock x:Name="VoiceLabel" Style="{StaticResource CheckLabel}" FontWeight="Bold" Text="Voice chat"
-                   IsEnabled="{Binding IsEnabled, ElementName=VoiceBox}"/>
-      </StackPanel>
-    </DockPanel>
-    <TextBlock x:Name="VoiceNote" Margin="0,4,0,0" TextWrapping="Wrap"/>
-    <Button x:Name="PlayButton" Margin="0,16,0,0" Height="50" FontSize="20" FontWeight="Bold" Content="Play"/>
-    <TextBlock x:Name="StatusText" Margin="0,10,0,0" TextWrapping="Wrap" MinHeight="20"/>
-    <ToggleButton x:Name="DetailsButton" Margin="0,6,0,0" HorizontalAlignment="Left" Padding="10,2" Content="Details"/>
-    <TextBox x:Name="DetailsBox" Margin="0,6,0,0" Height="170" IsReadOnly="True" TextWrapping="Wrap"
-             VerticalScrollBarVisibility="Auto" FontFamily="Consolas" Visibility="Collapsed"/>
-    <Expander x:Name="AdvancedBox" Margin="0,12,0,0" Header="Advanced">
+  <ScrollViewer Background="{StaticResource Canvas}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+    <StackPanel>
+      <Border Background="{StaticResource Field}" BorderBrush="{StaticResource MastheadLine}" BorderThickness="0,0,0,1" Padding="24,18">
+        <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+            <WrapPanel VerticalAlignment="Center">
+              <TextBlock Text="{DynamicResource Ui.Subtitle}" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource Subtitle}" VerticalAlignment="Center"/>
+              <Border Background="{StaticResource Badge}" CornerRadius="3" Padding="6,1" Margin="9,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="{DynamicResource Ui.Edition}" FontSize="11" Foreground="{StaticResource BadgeText}"/>
+              </Border>
+            </WrapPanel>
+            <TextBlock Text="Ring of Elysium" FontFamily="Bahnschrift, Segoe UI" FontSize="36" FontWeight="SemiBold"
+                       Foreground="{StaticResource Title}" TextWrapping="Wrap" Margin="-1,2,0,-2"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" VerticalAlignment="Center" Width="138">
+            <TextBlock x:Name="LanguageLabel" Text="{DynamicResource Ui.Language}" FontSize="12" Margin="0,0,0,4" Foreground="{StaticResource LanguageLabel}"/>
+            <ComboBox x:Name="LanguageBox" MinHeight="30" AutomationProperties.LabeledBy="{Binding ElementName=LanguageLabel}"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+      <StackPanel Margin="24,15,24,11">
+        <Border Padding="0,0,0,12">
+          <StackPanel>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="1.3*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="{DynamicResource Ui.Server}" Style="{StaticResource Label}"/>
+                <DockPanel>
+                  <Button x:Name="AddServerButton" DockPanel.Dock="Right" Margin="6,0,0,0" Content="{DynamicResource Ui.AddServer}"/>
+                  <ComboBox x:Name="ServerBox" AutomationProperties.Name="{DynamicResource Ui.Server}" ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}"/>
+                </DockPanel>
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="{DynamicResource Ui.Account}" Style="{StaticResource Label}"/>
+                <ComboBox x:Name="AccountBox" AutomationProperties.Name="{DynamicResource Ui.Account}" ToolTip="{Binding SelectedItem, RelativeSource={RelativeSource Self}}"/>
+              </StackPanel>
+            </Grid>
+            <ItemsControl x:Name="RegionTable" Margin="0,10,0,0" Focusable="False" IsTabStop="False"
+                         AutomationProperties.Name="{DynamicResource Ui.ServerStatus}">
+              <ItemsControl.Resources>
+                <Style x:Key="StatCell" TargetType="TextBlock">
+                  <Setter Property="Margin" Value="8,0"/>
+                  <Setter Property="VerticalAlignment" Value="Center"/>
+                  <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                  <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                </Style>
+              </ItemsControl.Resources>
+              <ItemsControl.Style>
+                <Style TargetType="ItemsControl"><Style.Triggers>
+                  <Trigger Property="HasItems" Value="False"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+                </Style.Triggers></Style>
+              </ItemsControl.Style>
+              <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                  <StackPanel>
+                    <Grid Height="26" Background="{StaticResource TableHeader}" TextElement.Foreground="{StaticResource TableHeading}"
+                          TextElement.FontWeight="SemiBold">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Region}"/>
+                      <TextBlock Grid.Column="1" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Online}"/>
+                      <TextBlock Grid.Column="2" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Queued}"/>
+                      <TextBlock Grid.Column="3" Style="{StaticResource StatCell}" Text="{DynamicResource Ui.Games}"/>
+                    </Grid>
+                    <ItemsPresenter/>
+                  </StackPanel>
+                </ControlTemplate>
+              </ItemsControl.Template>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border Height="27" Background="{StaticResource TableRow}" BorderBrush="{StaticResource TableLine}" BorderThickness="0,0,0,1">
+                    <Grid x:Name="Row">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/><ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                      </Grid.ColumnDefinitions>
+                      <DockPanel>
+                        <Ellipse x:Name="Availability" Width="7" Height="7" Margin="9,0,0,0" VerticalAlignment="Center" Fill="{StaticResource Available}" IsHitTestVisible="False"/>
+                        <TextBlock Style="{StaticResource StatCell}" Text="{Binding Region}"/>
+                      </DockPanel>
+                      <TextBlock Grid.Column="1" Style="{StaticResource StatCell}" Text="{Binding Online}"/>
+                      <TextBlock Grid.Column="2" Style="{StaticResource StatCell}" Text="{Binding Queued}"/>
+                      <TextBlock Grid.Column="3" Style="{StaticResource StatCell}" Text="{Binding Games}"/>
+                    </Grid>
+                  </Border>
+                  <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding Offline}" Value="True">
+                      <Setter TargetName="Row" Property="TextElement.Foreground" Value="{StaticResource Secondary}"/>
+                      <Setter TargetName="Availability" Property="Fill" Value="{StaticResource Unavailable}"/>
+                    </DataTrigger>
+                  </DataTemplate.Triggers>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock x:Name="ServerStats" Margin="0,6,0,0" TextWrapping="Wrap">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock"><Style.Triggers>
+                  <Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+                </Style.Triggers></Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <Border BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0" Margin="0,14,0,0" Padding="0,13,0,0">
+              <StackPanel>
+                <DockPanel Margin="0,0,0,7">
+                  <CheckBox x:Name="Dx12Box" DockPanel.Dock="Right" Padding="7,0,0,0" VerticalAlignment="Center" Content="DirectX 12"/>
+                  <TextBlock Text="{DynamicResource Ui.GameFolder}" FontWeight="SemiBold"/>
+                </DockPanel>
+                <DockPanel>
+                  <Button x:Name="BrowseButton" DockPanel.Dock="Right" MinWidth="94" Margin="7,0,0,0" Content="{DynamicResource Ui.Browse}"/>
+                  <TextBox x:Name="GameBox" IsReadOnly="True" MinHeight="35" AutomationProperties.Name="{DynamicResource Ui.GameFolder}"/>
+                </DockPanel>
+                <TextBlock x:Name="GameNote" TextWrapping="Wrap" Margin="0,5,0,0"/>
+              </StackPanel>
+            </Border>
+            <Border BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0" Margin="0,13,0,0" Padding="0,12,0,0">
+              <StackPanel>
+                <DockPanel>
+                  <Button x:Name="VoiceButton" DockPanel.Dock="Right" Margin="16,0,0,0" VerticalAlignment="Center" Content="{DynamicResource Ui.ChooseFolder}"/>
+                  <DockPanel VerticalAlignment="Center">
+                    <CheckBox x:Name="VoiceBox" VerticalAlignment="Center" Padding="0" AutomationProperties.Name="{DynamicResource Ui.Voice}"/>
+                    <TextBlock x:Name="VoiceLabel" Margin="8,0,0,0" Text="{DynamicResource Ui.Voice}" FontWeight="SemiBold" IsEnabled="{Binding IsEnabled, ElementName=VoiceBox}">
+                      <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                      </Style.Triggers></Style></TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock x:Name="VoiceStatus" Margin="12,0,0,0" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                  </DockPanel>
+                </DockPanel>
+                <TextBlock x:Name="VoiceNote" Margin="0,4,0,0" TextWrapping="Wrap">
+                  <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                    <Trigger Property="Tag" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+                  </Style.Triggers></Style></TextBlock.Style>
+                </TextBlock>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Border>
+        <Expander x:Name="AdvancedBox" Header="{DynamicResource Ui.Advanced}">
       <StackPanel Margin="0,6,0,0">
         <TextBlock x:Name="FirewallText" TextWrapping="Wrap"/>
         <WrapPanel Margin="0,6,0,0">
-          <Button x:Name="FirewallOnButton" Margin="0,0,6,6" Content="Firewall rules on"/>
-          <Button x:Name="FirewallOffButton" Margin="0,0,6,6" Content="Firewall rules off"/>
-          <Button x:Name="FirewallResetButton" Margin="0,0,6,6" Content="Reset all rules"/>
-          <Button x:Name="FirewallShowButton" Margin="0,0,6,6" Content="Show the rules"/>
+          <Button x:Name="FirewallOnButton" Margin="0,0,6,6" Content="{DynamicResource Ui.FwOn}"/>
+          <Button x:Name="FirewallOffButton" Margin="0,0,6,6" Content="{DynamicResource Ui.FwOff}"/>
+          <Button x:Name="FirewallResetButton" Margin="0,0,6,6" Content="{DynamicResource Ui.FwReset}"/>
+          <Button x:Name="FirewallShowButton" Margin="0,0,6,6" Content="{DynamicResource Ui.FwShow}"/>
         </WrapPanel>
-        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="Account backup: one file with the keys of every account, to play with them on another PC (join-roe-os.cmd and join-roe-os.py read it too). Keep it private."/>
+        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{DynamicResource Ui.BackupHelp}"/>
         <WrapPanel Margin="0,6,0,0">
-          <Button x:Name="ExportButton" Margin="0,0,6,6" Content="Export accounts..."/>
-          <Button x:Name="ImportButton" Margin="0,0,6,6" Content="Import accounts..."/>
-          <Button x:Name="LogButton" Margin="0,0,6,6" Content="Open the log"/>
+          <Button x:Name="ExportButton" Margin="0,0,6,6" Content="{DynamicResource Ui.Export}"/>
+          <Button x:Name="ImportButton" Margin="0,0,6,6" Content="{DynamicResource Ui.Import}"/>
+          <Button x:Name="LogButton" Margin="0,0,6,6" Content="{DynamicResource Ui.Log}"/>
         </WrapPanel>
         <StackPanel x:Name="AdminPanel" Margin="0,6,0,0" Visibility="Collapsed">
-          <TextBlock TextWrapping="Wrap" Text="This account is a GM on this server: the admin page has its settings (bots, matchmaking) and status, in your browser."/>
+          <TextBlock TextWrapping="Wrap" Text="{DynamicResource Ui.AdminHelp}"/>
           <WrapPanel Margin="0,6,0,0">
-            <Button x:Name="AdminButton" Margin="0,0,6,6" Content="Open the admin page"/>
+            <Button x:Name="AdminButton" Margin="0,0,6,6" Content="{DynamicResource Ui.Admin}"/>
           </WrapPanel>
         </StackPanel>
       </StackPanel>
-    </Expander>
-  </StackPanel>
+        </Expander>
+      </StackPanel>
+      <Border BorderBrush="{StaticResource Divider}" BorderThickness="0,1,0,0" Background="{StaticResource Footer}" Padding="24,12">
+        <StackPanel>
+        <DockPanel>
+          <Button x:Name="PlayButton" Style="{StaticResource Primary}" DockPanel.Dock="Right" MinWidth="124" MinHeight="38" FontSize="15" Content="{DynamicResource Ui.Play}"/>
+          <ToggleButton x:Name="DetailsButton" DockPanel.Dock="Right" Margin="0,0,10,0" VerticalAlignment="Center" Padding="10,4" MinHeight="30">
+            <ToggleButton.Style>
+              <Style TargetType="ToggleButton" BasedOn="{StaticResource DetailsToggle}">
+                <Setter Property="Content" Value="{DynamicResource Ui.Details}"/>
+                <Style.Triggers>
+                  <Trigger Property="IsChecked" Value="True"><Setter Property="Content" Value="{DynamicResource Ui.HideDetails}"/></Trigger>
+                </Style.Triggers>
+              </Style>
+            </ToggleButton.Style>
+          </ToggleButton>
+                    <TextBlock x:Name="StatusText" VerticalAlignment="Center" Margin="0,0,20,0" TextWrapping="Wrap"/>
+        </DockPanel>
+        <TextBox x:Name="DetailsBox" Height="134" Margin="0,9,0,0" VerticalContentAlignment="Top"
+                 AutomationProperties.Name="{DynamicResource Ui.Details}" IsReadOnly="True" TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto" FontFamily="Consolas">
+          <TextBox.Style>
+            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+              <Setter Property="Visibility" Value="Collapsed"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsChecked, ElementName=DetailsButton}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBox.Style>
+        </TextBox>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
 </Window>
-'@
+"@
 }
 function Get-GuiControlNames {
-    return @('ServerBox', 'AddServerButton', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'Dx12Box', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
+    return @('LanguageBox', 'ServerBox', 'AddServerButton', 'RegionTable', 'ServerStats', 'AccountBox', 'GameBox', 'BrowseButton', 'Dx12Box', 'GameNote', 'VoiceBox', 'VoiceButton', 'VoiceNote',
         'PlayButton', 'StatusText', 'DetailsButton', 'DetailsBox', 'AdvancedBox', 'FirewallText', 'FirewallOnButton', 'FirewallOffButton', 'FirewallResetButton',
-        'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton', 'VoiceLabel')
+        'FirewallShowButton', 'ExportButton', 'ImportButton', 'LogButton', 'AdminPanel', 'AdminButton', 'VoiceLabel', 'VoiceStatus')
 }
-function Get-InputXaml {
-    return @'
+function Get-InputXaml([bool]$HighContrast = [Windows.SystemParameters]::HighContrast) {
+    return @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ring of Elysium 2022" Width="440" SizeToContent="Height" ResizeMode="NoResize"
-        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
-  <StackPanel Margin="14">
-    <TextBlock x:Name="ContextText" Margin="0,0,0,10" TextWrapping="Wrap"/>
-    <TextBlock x:Name="PromptText" TextWrapping="Wrap"/>
-    <TextBox x:Name="AnswerBox" Margin="0,4,0,0"/>
-    <StackPanel Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button x:Name="OkButton" Width="86" Padding="0,3" IsDefault="True" Content="OK"/>
-      <Button Width="86" Margin="6,0,0,0" Padding="0,3" IsCancel="True" Content="Cancel"/>
+        Title="Ring of Elysium Launcher" Width="465" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        MaxHeight="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Height}"
+        MaxWidth="{Binding Source={x:Static SystemParameters.WorkArea}, Path=Width}"
+        Background="{DynamicResource Canvas}" Foreground="{DynamicResource Ink}" FontFamily="Segoe UI" FontSize="13"
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+  <Window.Resources>
+$(Get-GuiTheme $HighContrast)
+  </Window.Resources>
+  <ScrollViewer Background="{StaticResource Canvas}" VerticalScrollBarVisibility="Auto" Focusable="False">
+    <StackPanel>
+      <StackPanel Margin="20,19,20,0">
+        <TextBlock x:Name="PromptText" FontWeight="SemiBold" FontSize="20" TextWrapping="Wrap"/>
+      </StackPanel>
+      <StackPanel Margin="20,8,20,18">
+        <TextBlock x:Name="ContextText" Margin="0,0,0,7" Foreground="{StaticResource Secondary}" TextWrapping="Wrap"/>
+        <TextBox x:Name="AnswerBox" Margin="0,7,0,0" MinHeight="36" AutomationProperties.LabeledBy="{Binding ElementName=PromptText}"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+          <Button x:Name="OkButton" Width="84" Style="{StaticResource Primary}" IsDefault="True" Content="{DynamicResource Ui.Ok}"/>
+          <Button Width="84" Margin="8,0,0,0" IsCancel="True" Content="{DynamicResource Ui.Cancel}"/>
+        </StackPanel>
+      </StackPanel>
     </StackPanel>
-  </StackPanel>
+  </ScrollViewer>
 </Window>
-'@
+"@
 }
 function Get-GuiLogPath { return Join-Path (Join-Path $env:APPDATA 'roe-join') 'gui.log' }
 function Write-GuiLog([string]$Text) {
@@ -2050,47 +2886,71 @@ function Write-GuiLog([string]$Text) {
     } catch { }
 }
 function Get-Brush([string]$Level) {
-    switch ($Level) {
-        'error' { return [Windows.Media.Brushes]::Firebrick }
-        'warn' { return New-Object Windows.Media.SolidColorBrush ([Windows.Media.Color]::FromRgb(0xA0, 0x50, 0x00)) }
-        'muted' { return [Windows.SystemColors]::GrayTextBrush }
+    $role = switch ($Level) {
+        'error' { 'Error' }
+        'warn'  { 'Warning' }
+        'muted' { 'Secondary' }
+        default { 'Ink' }
     }
-    return [Windows.SystemColors]::ControlTextBrush
+    return $gui.Window.FindResource($role)
 }
 function Set-Text($Control, [string]$Text, [string]$Level = 'info') {
+    $Control.Tag = $null
     $Control.Text = $Text
     $Control.Foreground = Get-Brush $Level
 }
-# The server line: one region per line, an offline one (Format-Stats) greyed.
-function Set-StatsText($Control, [string]$Text, [string]$Level = 'info') {
-    Set-Text $Control '' $Level
-    $lines = @($Text -split "`n")
-    for ($i = 0; $i -lt $lines.Count; ++$i) {
-        if ($i) { $Control.Inlines.Add((New-Object Windows.Documents.LineBreak)) }
-        $run = New-Object Windows.Documents.Run $lines[$i]
-        if ($lines[$i] -match '\): offline\.?$') { $run.Foreground = Get-Brush 'muted' }
-        $Control.Inlines.Add($run)
-    }
+# Render the worker's existing status text. Preserve notices and older servers' INFO replies.
+function Set-GuiServerStatus([string]$Text, [string]$Level = 'info') {
+    $gui.LastStats = @{ Text = $Text; Level = $Level }
+    if ($Text -match '^Contacting (.+) \.\.\.$') { $Text = $gui.Strings.Contacting -f $Matches[1] }
+    elseif ($Text -eq 'Add the server the host gave you: Add server... (its IP address or domain).') { $Text = $gui.Strings.AddFirst }
+    elseif ($Text -eq 'No answer from the account service: the server may be down, or it has no accounts (then it takes a plain name).') { $Text = $gui.Strings.NoServerInfo }
+    $notes = New-Object 'System.Collections.Generic.List[string]'
+    $regionPattern = '^(?<region>.+ \([a-z]{1,12}\)): (?:offline|(?<online>\d+) online, (?<queued>\d+) searching, (?<games>\d+) match(?:es)?)(?:\.(?: (?<notice>.*))?)?$'
+    $rows = @(foreach ($line in ($Text -split "\r?\n")) {
+        # Periodic game updates prefix the first region with a timestamp and "On the server now:".
+        $prefix = [regex]::Match($line, '^(?:\[(?<time>\d{2}:\d{2})\] )?On the server now: ')
+        $region = [regex]::Match($line.Substring($prefix.Length), $regionPattern)
+        if (-not $region.Success) {
+            $notes.Add($line)
+            continue
+        }
+        if ($prefix.Groups['time'].Success) { $notes.Add('[' + $prefix.Groups['time'].Value + ']') }
+        if ($region.Groups['notice'].Success) { $notes.Add($region.Groups['notice'].Value) }
+        $offline = -not $region.Groups['online'].Success
+        [pscustomobject]@{
+            Region  = $region.Groups['region'].Value
+            Online  = if ($offline) { $gui.Strings.Offline } else { $region.Groups['online'].Value }
+            Queued  = if ($offline) { '-' } else { $region.Groups['queued'].Value }
+            Games   = if ($offline) { '-' } else { $region.Groups['games'].Value }
+            Offline = $offline
+        }
+    })
+    $gui.C.RegionTable.ItemsSource = $rows
+    Set-Text $gui.C.ServerStats ($notes -join "`n") $Level
 }
 # A line for the player: the status, the details and the log.
-function Add-Line([string]$Text, [string]$Level = 'info') {
+function Add-Line([string]$Text, [string]$Level = 'info', [string]$DisplayKey = '', [object[]]$Values = @()) {
     if ($Level -ne 'info') { Write-GuiLog "[$Level] $Text" } else { Write-GuiLog $Text }
     $gui.C.DetailsBox.AppendText("$Text`r`n")
     $gui.C.DetailsBox.ScrollToEnd()
     [void]$gui.Recent.Add($Text)
     while ($gui.Recent.Count -gt 12) { $gui.Recent.RemoveAt(0) }
-    Set-Text $gui.C.StatusText $Text $Level
+    if ($DisplayKey) { Set-GuiNote $gui.C.StatusText $DisplayKey $Level $Values }
+    else { Set-Text $gui.C.StatusText $Text $Level }
 }
 function Show-GuiError($Record, [string]$Prefix = '') {
     Write-GuiLog "$($Record | Out-String)$($Record.ScriptStackTrace)".Trim()
     Add-Line ($Prefix + (Get-ErrorMessage $Record)) 'error'
 }
 function Show-Message([string]$Text, [string]$Buttons = 'OK', [string]$Icon = 'Information', [string]$Default = 'OK') {
-    return "$([Windows.MessageBox]::Show($gui.Window, $Text, 'Ring of Elysium 2022', $Buttons, $Icon, $Default))"
+    return "$([Windows.MessageBox]::Show($gui.Window, $Text, 'Ring of Elysium Launcher', $Buttons, $Icon, $Default))"
 }
 # A question with a text field; $null when cancelled.
 function Show-InputDialog([string]$Prompt, [string]$Context, [string]$Default) {
-    $dialog = [Windows.Markup.XamlReader]::Parse((Get-InputXaml))
+    $dialog = New-GuiWindow (Get-InputXaml)
+    Set-GuiTextResources $dialog
+    if ($Prompt -eq 'Your name (1 to 24 characters)') { $Prompt = $gui.Strings.PlayerName }
     if ($gui.Window -and $gui.Window.IsLoaded) { $dialog.Owner = $gui.Window } else { $dialog.WindowStartupLocation = 'CenterScreen' }
     $contextText = $dialog.FindName('ContextText')
     $contextText.Text = $Context
@@ -2137,11 +2997,18 @@ function Receive-GuiEvents {
                     if ($gui.Window.WindowState -eq 'Minimized') { $gui.Window.WindowState = 'Normal' }
                     [void]$gui.Window.Activate()
                 }
-                'stats' { Set-StatsText $gui.C.ServerStats $item.Data }
+                'stats' { Set-GuiServerStatus $item.Data }
                 'game' {
                     $gui.GameRunning = $true
                     Update-Controls
-                    Add-Line 'Game running. This window puts the original voice DLL back when the game exits.'
+                    if ($item.Data) {
+                        Set-GuiNote $gui.C.VoiceStatus VoiceActive
+                        Add-Line 'Game running. This window puts the original voice DLL back when the game exits.'
+                    } else {
+                        Set-GuiNote $gui.C.VoiceStatus VoiceSessionOff muted
+                        Add-Line 'Game running.'
+                    }
+                    Set-Text $gui.C.VoiceNote ''
                 }
                 'done' { Complete-Work $item.Data }
                 'side-done' { Complete-SideWork $item.Data }
@@ -2229,7 +3096,7 @@ function Update-Controls {
     # The admin page also while the game runs: it has a worker of its own (Start-SideWork).
     $gui.C.AdminButton.IsEnabled = -not $gui.SideJob
     $gui.C.PlayButton.IsEnabled = -not $playing
-    $gui.C.PlayButton.Content = if ($gui.GameRunning) { 'Game running' } elseif ($playing) { 'Joining...' } else { 'Play' }
+    $gui.C.PlayButton.Content = if ($gui.GameRunning) { $gui.Strings.Running } elseif ($playing) { $gui.Strings.Joining } else { $gui.Strings.Play }
 }
 function Get-SelectedServer {
     $index = $gui.C.ServerBox.SelectedIndex
@@ -2263,7 +3130,7 @@ function Update-AccountList {
         $box = $gui.C.AccountBox
         $box.Items.Clear()
         foreach ($account in $gui.Accounts) { [void]$box.Items.Add($account.name) }
-        [void]$box.Items.Add('Create a new account')
+        [void]$box.Items.Add($gui.Strings.NewAccount)
         $box.SelectedIndex = 0
     } finally {
         $gui.Updating = $false
@@ -2293,12 +3160,12 @@ function Open-GuiAdmin {
 }
 function Request-ServerInfo {
     $server = Get-SelectedServer
-    if (-not $server) { Set-Text $gui.C.ServerStats 'Add the server the host gave you: Add server... (its IP address or domain).' 'muted'; return }
-    Set-Text $gui.C.ServerStats "Contacting $server ..." 'muted'
+    if (-not $server) { Set-GuiServerStatus 'Add the server the host gave you: Add server... (its IP address or domain).' 'muted'; return }
+    Set-GuiServerStatus "Contacting $server ..." 'muted'
     Start-Work 'Invoke-ServerJob' @{ Server = $server } { param($done) Show-ServerInfo $done }
 }
 function Show-ServerInfo($Done) {
-    if (-not $Done.Ok) { Set-Text $gui.C.ServerStats $Done.Message 'error'; return }
+    if (-not $Done.Ok) { Set-GuiServerStatus $Done.Message 'error'; return }
     $server = $Done.Result.Server
     if ((Get-SelectedServer) -ne $server) { return }  # another one was selected meanwhile; its request follows
     $contact = $Done.Result.Contact
@@ -2309,7 +3176,7 @@ function Show-ServerInfo($Done) {
         if (Set-ServerName $servers $server $contact.Name) { Update-Settings @{ servers = $servers }; Update-ServerList $server }
     }
     $line = Get-ServerInfoText $contact
-    Set-StatsText $gui.C.ServerStats $line.Text $line.Level
+    Set-GuiServerStatus $line.Text $line.Level
     if (-not $gui.Playing) {
         $index = $gui.C.AccountBox.SelectedIndex
         Update-AccountList
@@ -2326,12 +3193,12 @@ function Update-GameFolder {
     $choice = Get-GameFolderChoice $gui.GameBase ([bool]$gui.Dx12)
     $gui.Client = $choice.Folder
     if (-not $gui.GameBase) {
-        Set-Text $gui.C.GameNote ('Choose the Ring of Elysium folder with Browse...: usually C:\Program Files (x86)\Steam\steamapps\common\Ring of Elysium. ' +
-            'Tick DirectX 12 for the DX12 version.') 'warn'
+        Set-GuiNote $gui.C.GameNote LocateGame warn
     } elseif ($choice.Problem) {
         Set-Text $gui.C.GameNote $choice.Problem 'warn'
     } else {
-        Set-Text $gui.C.GameNote $(if ($gui.Dx12) { "The DirectX 12 version: $($choice.Folder)" } else { 'The DirectX 11 version.' }) 'muted'
+        if ($gui.Dx12) { Set-GuiNote $gui.C.GameNote Dx12 muted @($choice.Folder) }
+        else { Set-GuiNote $gui.C.GameNote Dx11 muted }
     }
 }
 # Checks the game build of the chosen folder in the background and saves it (roe-join.json
@@ -2339,7 +3206,7 @@ function Update-GameFolder {
 function Save-GuiGameFolder {
     if (-not $gui.Client) { Add-Line (Get-GameFolderChoice $gui.GameBase ([bool]$gui.Dx12)).Problem 'error'; return }
     $folder = $gui.Client
-    Add-Line "Checking the game in $folder ..."
+    Add-Line "Checking the game in $folder ..." info Checking @($folder)
     Start-Work 'Get-GameFolder' @{ Folder = $folder } {
         param($done)
         if (-not $done.Ok) { Add-Line $done.Message 'error'; return }
@@ -2349,44 +3216,58 @@ function Save-GuiGameFolder {
         Update-Settings @{ client = $done.Result }
         Update-GameFolder
         Update-Voice
-        Add-Line "Game folder: $($done.Result) (the tested version)."
+        Add-Line "Game folder: $($done.Result) (the tested version)." info FolderVerified @($done.Result)
     }
 }
 function Update-Voice {
     $gui.Updating = $true
     try { $gui.C.VoiceBox.IsChecked = (Read-Settings).voice -ne $false } finally { $gui.Updating = $false }
     if (-not $gui.C.VoiceBox.IsChecked) {
-        Set-Text $gui.C.VoiceNote 'Voice chat is off.' 'muted'
+        Set-GuiNote $gui.C.VoiceStatus VoiceOff muted
+        Set-Text $gui.C.VoiceNote ''
         $gui.C.VoiceButton.Visibility = 'Collapsed'
         return
     }
     $gui.C.VoiceButton.Visibility = 'Visible'
     $dll = Get-GuiVoiceDll
-    $problem = Get-VoiceDllProblem $dll $(if (Test-Client $gui.Client) { $gui.Client } else { '' })
     if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) {
-        Set-Text $gui.C.VoiceNote ("Our $voiceFile is not next to join-roe-os.cmd or in its voice folder. Choose the folder that has it (the voice folder of the server package), " +
-            "or download it from $voiceDownload.") 'warn'
-    } elseif ($problem) {
-        Set-Text $gui.C.VoiceNote "Voice chat: $problem. Choose the folder with ours." 'warn'
+        Set-GuiNote $gui.C.VoiceStatus VoiceFileMissing warn
+        Set-GuiNote $gui.C.VoiceNote VoiceMissing warn @($voiceFile)
+        return
+    }
+    $problem = Get-VoiceDllProblem $dll $(if (Test-Client $gui.Client) { $gui.Client } else { '' })
+    if ($problem) {
+        Set-GuiNote $gui.C.VoiceStatus VoiceFileInvalid warn
+        Set-GuiNote $gui.C.VoiceNote VoiceProblem warn @($problem)
     } else {
-        Set-Text $gui.C.VoiceNote "Our $voiceFile ($dll) goes into the game folder while the game runs; the original is put back afterwards." 'muted'
+        Set-GuiNote $gui.C.VoiceStatus VoiceAvailable
+        Set-GuiNote $gui.C.VoiceNote VoiceReady muted @($dll)
     }
 }
 function Update-FirewallText {
     $firewall = (Read-Settings).firewall
-    $state = if ($null -eq $firewall) { 'not chosen yet (asked at the first Play)' } elseif ($firewall) { 'on' } else { 'off' }
-    $gui.C.FirewallText.Text = "Firewall rules: $state. When on, the game can reach only the servers you join, nothing else on the internet (setting them needs administrator approval when the allowed addresses change)."
+    $gui.FirewallState = if ($null -eq $firewall) { 'FirewallPending' } elseif ($firewall) { 'FirewallOn' } else { 'FirewallOff' }
+    $gui.C.FirewallText.Text = $gui.Strings.($gui.FirewallState) + ' ' + $gui.Strings.FirewallHelp
 }
 # A folder picker; '' when cancelled.
 function Select-Folder([string]$Description, [string]$Start) {
-    $dialog = New-Object Windows.Forms.FolderBrowserDialog
-    $dialog.Description = $Description
-    $dialog.ShowNewFolderButton = $false
-    if ($Start -and (Test-Path -LiteralPath $Start -PathType Container)) { $dialog.SelectedPath = $Start }
-    try { if ("$($dialog.ShowDialog())" -ne 'OK') { return '' }; return $dialog.SelectedPath } finally { $dialog.Dispose() }
+    $owner = [Windows.Interop.WindowInteropHelper]::new($gui.Window).EnsureHandle()
+    $dialog = [Windows.Forms.FolderBrowserDialog]::new()
+    $dialogOwner = [Windows.Forms.NativeWindow]::new()
+    try {
+        $dialogOwner.AssignHandle($owner)
+        $dialog.Description = $Description
+        $dialog.ShowNewFolderButton = $false
+        if ([IO.Directory]::Exists($Start)) { $dialog.SelectedPath = $Start }
+        if ($dialog.ShowDialog($dialogOwner) -eq [Windows.Forms.DialogResult]::OK) { return $dialog.SelectedPath }
+        return ''
+    } finally {
+        $dialogOwner.ReleaseHandle()
+        $dialog.Dispose()
+    }
 }
 function Select-GameFolder {
-    $path = Select-Folder 'The Ring of Elysium folder (usually ...\steamapps\common\Ring of Elysium). Tick DirectX 12 for the DX12 version.' $gui.GameBase
+    $path = Select-Folder $gui.Strings.LocateGame $gui.GameBase
     if (-not $path) { return }
     # An XVersion folder picked directly: the folder above it, with DirectX 12.
     $split = Split-GameFolder $path
@@ -2402,21 +3283,21 @@ function Set-GuiDx12 {
 }
 function Select-VoiceFolder {
     $start = Split-Path -Parent (Get-GuiVoiceDll)
-    $path = Select-Folder "The folder with our $voiceFile (the voice folder of the server package)." $start
+    $path = Select-Folder ($gui.Strings.VoiceFolder -f $voiceFile) $start
     if (-not $path) { return }
     $dll = Resolve-VoiceDll $path
     $problem = Get-VoiceDllProblem $dll $(if (Test-Client $gui.Client) { $gui.Client } else { '' })
     if ($problem) { Add-Line "Voice chat: $problem." 'error'; return }
     Update-Settings @{ voice_dll = [IO.Path]::GetFullPath($dll); voice = $true }
     Update-Voice
-    Add-Line "Voice chat: our $voiceFile is $dll."
+    Add-Line "Voice chat: our $voiceFile is $dll." info VoicePath @($dll)
 }
 function Add-GuiServer {
-    $address = Show-InputDialog 'Server address (IP or domain)' 'The host of the server gives you its address, for example 203.0.113.5 or play.example.org.' ''
+    $address = Show-InputDialog $gui.Strings.Address $gui.Strings.AddressHelp ''
     if ($null -eq $address) { return }
     $address = $address.Trim()
     if (-not $address) { return }
-    if (-not (Test-BackupAddress $address)) { Add-Line "That is no IP address or domain: $address" 'error'; return }
+    if (-not (Test-BackupAddress $address)) { Add-Line "That is no IP address or domain: $address" error BadAddress @($address); return }
     try { [void](Get-ServerHost $address) } catch { Show-GuiError $_; return }
     Update-Settings @{ servers = @(Add-ServerUse @(Get-OfferedServers (Read-Settings)) $address) }
     Update-ServerList $address
@@ -2431,9 +3312,7 @@ function Start-Play {
         return
     }
     if ($null -eq (Read-Settings).firewall) {
-        $answer = Show-Message ('join-roe-os.cmd can add Windows Firewall rules so the game reaches only the servers you join (it also tries the ' +
-            "publisher's old servers). That needs administrator approval (a Windows prompt) when the allowed addresses change.`n`n" +
-            'Add the firewall rules? (Change it later under Advanced.)') 'YesNo' 'Question' 'Yes'
+        $answer = Show-Message $gui.Strings.AskFirewall 'YesNo' 'Question' 'Yes'
         Update-Settings @{ firewall = $answer -eq 'Yes' }
         Update-FirewallText
     }
@@ -2442,19 +3321,19 @@ function Start-Play {
     if ($voiceOn) {
         $problem = Get-VoiceDllProblem (Get-GuiVoiceDll) $gui.Client
         if ($problem) {
-            if ((Show-Message "Voice chat: $problem.`n`nPlay without voice chat this time?" 'YesNo' 'Question' 'Yes') -ne 'Yes') { return }
+            if ((Show-Message ("$problem`n`n" + $gui.Strings.WithoutVoice) 'YesNo' 'Question' 'Yes') -ne 'Yes') { return }
             $useVoice = $false
         }
     }
     Update-Settings @{ voice = $voiceOn }
     $entry = Get-SelectedAccount
     $gui.Playing = $true
-    Add-Line "Joining $server ..."
+    Add-Line "Joining $server ..." info ConnectTo @($server)
     Start-Work 'Invoke-PlayJob' @{ Client = $gui.Client; Server = $server; Token = "$($entry.token)"; AccountName = "$($entry.name)"; New = ($null -eq $entry); UseVoice = $useVoice } {
         param($done)
         $gui.Playing = $false
         $gui.GameRunning = $false
-        if ($done.Ok) { Add-Line 'The game has exited.' } else { Add-Line "Could not join: $($done.Message)" 'error' }
+        if ($done.Ok) { Add-Line 'The game has exited.' info GameExited } else { Add-Line "Could not join: $($done.Message)" error JoinFailed @($done.Message) }
         Update-ServerList (Get-SelectedServer)
         Update-FirewallText
         Update-Voice
@@ -2475,7 +3354,7 @@ function Set-GuiFirewall([string]$Action) {
             }
         }
         'reset' {
-            if ((Show-Message "Remove the firewall rules of every game folder (join-roe-os.cmd's and the server launcher's)? The next Play allows only its own server." 'YesNo' 'Question' 'No') -ne 'Yes') { return }
+            if ((Show-Message $gui.Strings.ResetConfirm 'YesNo' 'Question' 'No') -ne 'Yes') { return }
             Start-Work 'Reset-AllRules' @{} $null
         }
         'show' {
@@ -2488,7 +3367,7 @@ function Set-GuiFirewall([string]$Action) {
 function Export-GuiAccounts {
     $dialog = New-Object Microsoft.Win32.SaveFileDialog
     $dialog.FileName = 'roe-join-accounts.json'
-    $dialog.Filter = 'Account backup (*.json)|*.json|All files (*.*)|*.*'
+    $dialog.Filter = "$($gui.Strings.Backup) (*.json)|*.json|$($gui.Strings.AllFiles) (*.*)|*.*"
     if ($dialog.ShowDialog($gui.Window) -ne $true) { return }
     $done = Export-Accounts $joinRoot (Read-Settings) $dialog.FileName
     Add-Line "Saved $($done.Accounts) accounts of $($done.Servers) servers in $($dialog.FileName). On the other PC: Import accounts... (or join-roe-os.cmd import <file>)."
@@ -2496,7 +3375,7 @@ function Export-GuiAccounts {
 }
 function Import-GuiAccounts {
     $dialog = New-Object Microsoft.Win32.OpenFileDialog
-    $dialog.Filter = 'Account backup (*.json)|*.json|All files (*.*)|*.*'
+    $dialog.Filter = "$($gui.Strings.Backup) (*.json)|*.json|$($gui.Strings.AllFiles) (*.*)|*.*"
     if ($dialog.ShowDialog($gui.Window) -ne $true) { return }
     Add-Line $backupWarning 'warn'
     Start-Work 'Import-Accounts' @{ Root = $joinRoot; Settings = (Read-Settings); File = $dialog.FileName } {
@@ -2509,6 +3388,20 @@ function Import-GuiAccounts {
         Update-ServerList (Get-SelectedServer)
         Request-ServerInfo
     }
+}
+function Show-GuiDetails {
+    $box = $gui.C.DetailsBox
+    $path = Get-GuiLogPath
+    try {
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            $lines = @(Get-Content -LiteralPath $path -Encoding UTF8 -Tail 80 -ErrorAction Stop)
+            if ($lines.Count) { $box.Text = ($lines -join "`r`n") + "`r`n" }
+        }
+    } catch { } # The current session's in-memory lines are still available.
+    if (-not $box.Text.Trim()) { $box.Text = $gui.C.StatusText.Text + "`r`n" }
+    $gui.Window.UpdateLayout()
+    $box.BringIntoView()
+    $box.ScrollToEnd()
 }
 function Open-GuiLog {
     $path = Get-GuiLogPath
@@ -2523,7 +3416,7 @@ function Start-Gui([string]$Code) {
     $log = Get-GuiLogPath
     if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 1MB) { Move-Item -LiteralPath $log -Destination ($log -replace '\.log$', '.old.log') -Force }
     Write-GuiLog "join-roe-os.cmd $joinVersion opens its window ($env:ROE_JOIN_SELF)."
-    $window = [Windows.Markup.XamlReader]::Parse((Get-GuiXaml))
+    $window = New-GuiWindow (Get-GuiXaml)
     $gui.Window = $window
     # The administrator prompt belongs to this window (Get-PromptOwner).
     $window.Add_SourceInitialized({ $sync.Owner = (New-Object Windows.Interop.WindowInteropHelper $this).Handle })
@@ -2535,6 +3428,7 @@ function Start-Gui([string]$Code) {
     $gui.SideJob = $null; $gui.SideWorker = $null; $gui.Code = $Code
     $gui.Roles = $null; $gui.RolesServer = ''
 
+    Initialize-GuiLanguage
     $gui.Worker = New-Worker $Code
 
     $settings = Read-Settings
@@ -2551,7 +3445,7 @@ function Start-Gui([string]$Code) {
     Update-Voice
     Update-FirewallText
     Update-Controls
-    Set-Text $gui.C.StatusText 'Choose the server and the account, then Play.' 'muted'
+    Set-GuiNote $gui.C.StatusText Ready muted
 
     Add-Handler $gui.C.ServerBox 'SelectionChanged' { if (-not $gui.Updating) { $gui.Roles = $null; $gui.RolesServer = ''; Update-AccountList; Request-ServerInfo } }
     Add-Handler $gui.C.AccountBox 'SelectionChanged' { if (-not $gui.Updating) { Update-AdminPanel } }
@@ -2561,9 +3455,10 @@ function Start-Gui([string]$Code) {
     Add-Handler $gui.C.Dx12Box 'Click' { if (-not $gui.Updating) { Set-GuiDx12 } }
     Add-Handler $gui.C.VoiceBox 'Click' { Update-Settings @{ voice = [bool]$gui.C.VoiceBox.IsChecked }; Update-Voice }
     Add-Handler $gui.C.VoiceButton 'Click' { Select-VoiceFolder }
+    # Refresh after the player returns from downloading or moving the DLL.
+    Add-Handler $window 'Activated' { if ($gui.Window.IsLoaded -and -not $gui.Playing) { Update-Voice } }
     Add-Handler $gui.C.PlayButton 'Click' { Start-Play }
-    Add-Handler $gui.C.DetailsButton 'Checked' { $gui.C.DetailsBox.Visibility = 'Visible' }
-    Add-Handler $gui.C.DetailsButton 'Unchecked' { $gui.C.DetailsBox.Visibility = 'Collapsed' }
+    Add-Handler $gui.C.DetailsButton 'Checked' { Show-GuiDetails }
     Add-Handler $gui.C.FirewallOnButton 'Click' { Set-GuiFirewall 'on' }
     Add-Handler $gui.C.FirewallOffButton 'Click' { Set-GuiFirewall 'off' }
     Add-Handler $gui.C.FirewallResetButton 'Click' { Set-GuiFirewall 'reset' }
@@ -2574,8 +3469,7 @@ function Start-Gui([string]$Code) {
     $window.Add_Closing({
         param($sender, $e)
         if (-not $gui.Playing) { return }
-        $answer = Show-Message ("join-roe-os.cmd is still joining or waits for the game to exit, to put the game's original $voiceFile back. " +
-            'Close it anyway? Then the next start of join-roe-os.cmd puts it back.') 'YesNo' 'Warning' 'No'
+        $answer = Show-Message $gui.Strings.CloseConfirm 'YesNo' 'Warning' 'No'
         if ($answer -ne 'Yes') { $e.Cancel = $true }
     })
     $timer = New-Object Windows.Threading.DispatcherTimer
@@ -2615,7 +3509,7 @@ if ($env:ROE_JOIN_WINDOW) {
     } catch {
         $message = Get-ErrorMessage $_
         Write-GuiLog "join-roe-os.cmd could not start its window: $message`r`n$($_ | Out-String)$($_.ScriptStackTrace)"
-        try { [void][Windows.MessageBox]::Show("join-roe-os.cmd could not start its window: $message`n`nDetails: $(Get-GuiLogPath)", 'Ring of Elysium 2022', 'OK', 'Error') } catch { }
+        try { [void][Windows.MessageBox]::Show("join-roe-os.cmd could not start its window: $message`n`nDetails: $(Get-GuiLogPath)", 'Ring of Elysium Launcher', 'OK', 'Error') } catch { }
     }
     [Environment]::Exit(0)
 }
