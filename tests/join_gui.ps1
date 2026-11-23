@@ -275,6 +275,12 @@ Check 'server step: no role' ($global:Sent -contains "ROLE $t1" -and $r.Roles.Co
 $global:Replies["ROLE $t1"] = 'OK gm'
 $r = Invoke-ServerJob '127.0.0.5'
 Check 'server step: roles' ($r.Roles[$t1] -eq 'gm' -and $r.Roles.Count -eq 1)
+# The region table's refresh: STATS alone, as the server line shows it.
+$statsCache = @{}
+$global:Sent.Clear()
+$global:Replies['STATS'] = 'OK 7,normal,4,3,0,EU%20SERVER,up,solo-tpp:3'
+$r = Invoke-StatsJob '127.0.0.5'
+Check 'stats job' ($r.Server -eq '127.0.0.5' -and $r.Regions -ceq 'EU (normal): 4 online, 3 searching (solo 3), 0 matches' -and ($global:Sent -join ',') -eq 'STATS')
 # Open the admin page: the link of the server's address in the browser; refused for a player.
 function Start-Process { param([Parameter(Position = 0)]$FilePath) $global:Opened = "$FilePath" }
 $global:Replies["WEB $t1"] = "OK $('c' * 64) https%3A%2F%2Fadmin.example.org"
@@ -339,6 +345,29 @@ Update-GameFolder
 Update-ServerList '127.0.0.5'
 $gui.C.AccountBox.SelectedIndex = [array]::IndexOf(@($gui.Accounts | ForEach-Object { $_.name }), 'Anna')
 $gui.C.VoiceBox.IsChecked = $false
+# While the window is open: the selected server's table again (STATS), its notice kept; not while a
+# game is joined, other work waits or the server answered no STATS; an answer for another server or
+# an empty one changes nothing.
+$gui.Queue = New-Object System.Collections.ArrayList
+$gui.Job = $null
+$gui.Contact = [pscustomobject]@{ Info = 'OK players=1'; TooOld = ''; Notice = 'A newer join-roe-os.cmd is out.'; Regions = 'EU (normal): 1 online, 0 searching, 0 matches' }
+$gui.ContactServer = Get-SelectedServer
+Update-GuiStats
+$w = $global:Work[$global:Work.Count - 1]
+Check 'refresh: stats job' ($global:Work.Count -eq 1 -and $w.Command -eq 'Invoke-StatsJob' -and $w.Arguments.Server -eq '127.0.0.5')
+& $w.OnDone ([pscustomobject]@{ Ok = $true; Result = [pscustomobject]@{ Server = '127.0.0.5'; Regions = 'EU (normal): 4 online, 3 searching (solo 3), 0 matches' } })
+$row = $gui.C.RegionTable.Items[0]
+Check 'refresh: table and notice' ($row.Online -ceq '4' -and $row.Queued -ceq '3' -and $row.Modes -ceq 'solo 3' -and $gui.C.ServerStats.Text -ceq 'A newer join-roe-os.cmd is out.')
+& $w.OnDone ([pscustomobject]@{ Ok = $true; Result = [pscustomobject]@{ Server = 'b.example'; Regions = 'EU (normal): 9 online, 0 searching, 0 matches' } })
+& $w.OnDone ([pscustomobject]@{ Ok = $true; Result = [pscustomobject]@{ Server = '127.0.0.5'; Regions = '' } })
+& $w.OnDone ([pscustomobject]@{ Ok = $false; Message = 'no answer' })
+Check 'refresh: other server, empty or failed kept' ($gui.C.RegionTable.Items[0].Online -ceq '4')
+$gui.Playing = $true; Update-GuiStats; $gui.Playing = $false
+[void]$gui.Queue.Add('waiting'); Update-GuiStats; $gui.Queue.Clear()
+$gui.ContactServer = 'b.example'; Update-GuiStats; $gui.ContactServer = '127.0.0.5'
+$gui.Contact.Regions = ''; Update-GuiStats
+Check 'refresh: not while joining, busy, for another server or without STATS' ($global:Work.Count -eq 1)
+$global:Work.Clear()
 Start-Play
 $w = $global:Work[0]
 Check 'play: the selected account' ($w.Command -eq 'Invoke-PlayJob' -and $w.Arguments.Token -ceq $t1 -and $w.Arguments.Client -eq (Join-Path $both 'XVersion') -and

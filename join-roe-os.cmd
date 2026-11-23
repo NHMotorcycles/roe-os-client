@@ -1798,6 +1798,11 @@ function Invoke-ServerJob([string]$Server) {
     }
     return [pscustomobject]@{ Server = $Server; Contact = $contact; Roles = $roles }
 }
+# The region table again (Update-GuiStats): the server's STATS as Format-Stats shows it.
+function Invoke-StatsJob([string]$Server) {
+    $ip = (Resolve-ServerIps (Get-ServerHost $Server))[0]
+    return [pscustomobject]@{ Server = $Server; Regions = (Format-Stats (Get-ServerStats $ip (Get-AccountFolder $Server))) }
+}
 # Advanced > Open the admin page: the login link of the account (Token) in the browser.
 function Invoke-AdminJob([string]$Server, [string]$Token) {
     $hostName = Get-ServerHost $Server
@@ -3195,6 +3200,8 @@ function Show-ServerInfo($Done) {
     $server = $Done.Result.Server
     if ((Get-SelectedServer) -ne $server) { return }  # another one was selected meanwhile; its request follows
     $contact = $Done.Result.Contact
+    $gui.Contact = $contact
+    $gui.ContactServer = $server
     $gui.Roles = $Done.Result.Roles
     $gui.RolesServer = $server
     if ($contact.Name -and -not $gui.Playing) {
@@ -3209,6 +3216,24 @@ function Show-ServerInfo($Done) {
         if ($index -lt $gui.C.AccountBox.Items.Count) { $gui.C.AccountBox.SelectedIndex = $index }
     }
     Update-AdminPanel
+}
+# While the window is open (Start-Gui's timer): the region table of the selected server again, from a
+# server that answered STATS, only while the worker has nothing else to do and no game is joined or
+# runs (the play step sends the numbers itself then). Get-ServerStats asks at most every 10 s.
+function Update-GuiStats {
+    $server = Get-SelectedServer
+    if (-not $server -or -not $gui.Contact -or -not $gui.Contact.Regions -or $gui.ContactServer -ne $server) { return }
+    if ($gui.Playing -or $gui.Job -or $gui.Queue.Count) { return }
+    Start-Work 'Invoke-StatsJob' @{ Server = $server } { param($done) Show-GuiStats $done }
+}
+# The refreshed table, with the server line's notices (Get-ServerInfoText); a failed or empty answer
+# keeps the table as it is.
+function Show-GuiStats($Done) {
+    if (-not $Done.Ok -or -not $Done.Result.Regions -or $gui.Playing) { return }
+    if ($Done.Result.Server -ne (Get-SelectedServer) -or $Done.Result.Server -ne $gui.ContactServer) { return }
+    $gui.Contact.Regions = $Done.Result.Regions
+    $line = Get-ServerInfoText $gui.Contact
+    Set-GuiServerStatus $line.Text $line.Level
 }
 # The game folder: the Ring of Elysium folder (GameBase) and the DirectX 12 box (Dx12: its XVersion
 # folder). Client is the resulting folder when it has Europa_Client.exe, else ''.
@@ -3502,11 +3527,17 @@ function Start-Gui([string]$Code) {
     $timer.Interval = [TimeSpan]::FromMilliseconds(100)
     $timer.Add_Tick({ Receive-GuiEvents })
     $timer.Start()
+    # Who plays and searches where, while the window is open.
+    $statsTimer = New-Object Windows.Threading.DispatcherTimer
+    $statsTimer.Interval = [TimeSpan]::FromSeconds(15)
+    Add-Handler $statsTimer 'Tick' { Update-GuiStats }
+    $statsTimer.Start()
     # Our voice DLL left by a crash or a closed window: the original back first.
     Start-Work 'Restore-AllVoice' @{} $null
     Request-ServerInfo
     [void]$window.ShowDialog()
     $timer.Stop()
+    $statsTimer.Stop()
     Write-GuiLog 'join-roe-os.cmd closed its window.'
 }
 
