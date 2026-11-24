@@ -862,6 +862,9 @@ class JoinCmdServers(unittest.TestCase):
     def test_functions(self):
         run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 52)
 
+    def test_with_steam(self):
+        run_powershell(self, 'join_cmd_servers.ps1', lambda base: None, 52, WITH_STEAM)
+
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class JoinCmdFirewall(unittest.TestCase):
@@ -899,6 +902,20 @@ class NoCompiledCode(unittest.TestCase):
         text = (JOIN.parent / 'join-roe-os.cmd').read_text()
         self.assertEqual(set(re.findall(r'(?i)Add-Type\s+-?\w*', text)), {'Add-Type -AssemblyName'})
         self.assertNotRegex(text, r'(?i)DllImport|TypeDefinition|MemberDefinition|ComImport')
+        self.assertNotIn('\u2014', text)
+        self.assertNotRegex(text, r'(?i)0x2014')
+
+    def test_steam_copy(self):
+        """The Steam copy: the same, plus the one Add-Type its Steam start needs (hiding the console
+        Steam's cmd.exe opens): kernel32/user32 console window calls, nothing for the window's look."""
+        text = WITH_STEAM.read_text()
+        self.assertEqual(set(re.findall(r'(?i)Add-Type\s+-?\w*', text)), {'Add-Type -AssemblyName', 'Add-Type -Namespace'})
+        self.assertEqual(len(re.findall(r'(?i)Add-Type\s+-Namespace', text)), 1)
+        self.assertEqual(len(re.findall(r'(?i)MemberDefinition', text)), 1)
+        self.assertNotRegex(text, r'(?i)TypeDefinition|ComImport|dwmapi|shell32|IFileOpenDialog|DwmSetWindowAttribute')
+        self.assertEqual(sorted(re.findall(r'\[DllImport\("(\w+\.dll)"[^]]*\] public static extern \w+ (\w+)\(', text)),
+                         [('kernel32.dll', 'GetConsoleWindow'), ('user32.dll', 'GetClassName'), ('user32.dll', 'GetWindow'), ('user32.dll', 'ShowWindow')])
+        self.assertEqual(len(re.findall(r'DllImport', text)), 4)
         self.assertNotIn('\u2014', text)
         self.assertNotRegex(text, r'(?i)0x2014')
 
@@ -1470,9 +1487,9 @@ WITH_STEAM = JOIN.parent / 'with-steam' / 'join-roe-os.cmd'
 
 @unittest.skipUnless(shutil.which('powershell.exe') and shutil.which('wslpath'), 'needs powershell.exe (WSL)')
 class WithSteam(unittest.TestCase):
-    """with-steam/join-roe-os.cmd: join-roe-os.cmd with Start through Steam (the last version before its
-    removal, ff1b634): the Steam start's functions (command line, game folder, profile, launch options in
-    localconfig.vdf, the same as join-roe-os.py's) and its window (through powershell.exe)."""
+    """with-steam/join-roe-os.cmd: join-roe-os.cmd with Start through Steam: the Steam start's functions
+    (command line, game folder, profile, launch options in localconfig.vdf, the same as join-roe-os.py's)
+    and its window (through powershell.exe)."""
     def test_steam_functions(self):
         def prepare(base):
             (base / 'sample.vdf').write_bytes(SAMPLE_VDF.encode('utf-8'))
@@ -1496,7 +1513,8 @@ class WithSteam(unittest.TestCase):
     def test_window(self):
         def prepare(base):
             (base / 'game').mkdir()
-        run_powershell(self, 'join_gui_steam.ps1', prepare, 55, WITH_STEAM)
+            (base / 'valid-voice.dll').write_bytes(fake_dll(b'GetVoiceEngine UI test'))
+        run_powershell(self, 'join_gui_steam.ps1', prepare, 71, WITH_STEAM)
 
     def test_same_server_part(self):
         """The Steam copy is the main script plus the Steam start: the same version line."""
@@ -1504,6 +1522,44 @@ class WithSteam(unittest.TestCase):
         steam = version.findall(WITH_STEAM.read_text())
         self.assertEqual(len(steam), 1)
         self.assertEqual(steam, version.findall((JOIN.parent / 'join-roe-os.cmd').read_text()))
+
+
+
+class WithSteamShared(unittest.TestCase):
+    """with-steam/join-roe-os.cmd is join-roe-os.cmd plus the Steam start: the same functions, the same
+    UI texts in every language, plus its own."""
+    def test_functions(self):
+        """Every function of the main copy, unchanged except the ones the Steam start adds to."""
+        def functions(path):
+            pattern = re.compile(r'^function ([\w-]+)\b[^\n]*?(?:\}\n|\{\n(?:.*?\n)*?^\}\n)', re.M | re.S)
+            return {m.group(1): m.group(0) for m in pattern.finditer(path.read_text())}
+        main, steam = functions(JOIN.parent / 'join-roe-os.cmd'), functions(WITH_STEAM)
+        self.assertGreater(len(main), 150)
+        self.assertEqual(set(main) - set(steam), set())
+        self.assertEqual({name for name in main if main[name] != steam[name]},
+                         {'Get-GuiControlNames', 'Get-GuiLanguages', 'Get-GuiXaml', 'Invoke-PlayJob', 'Save-JoinSettings',
+                          'Start-Game', 'Start-Gui', 'Start-Play', 'Update-Controls'})
+        self.assertEqual(set(steam) - set(main) - {'Hide-ConsoleWindow', 'Get-AccountId', 'Get-WindowLauncher', 'Get-OwnLaunchers', 'Get-LaunchState',
+                                                   'Split-CommandLine', 'Set-GuiClipboard'},
+                         {name for name in steam if re.search(r'Steam|Vdf|LaunchOptions', name)})
+
+    def test_texts(self):
+        """The same languages and texts, the Steam section's texts in every language."""
+        def catalog(path):
+            text = path.read_text()
+            return json.loads(re.search(r"function Get-GuiLanguages \{\n    return \(ConvertFrom-Json @'\n(.*?)\n'@", text, re.S).group(1))
+        main, steam = catalog(JOIN.parent / 'join-roe-os.cmd'), catalog(WITH_STEAM)
+        self.assertEqual(list(main), list(steam))
+        own = {'SteamSetup', 'SteamIntro', 'SteamByHand', 'SteamByHandHelp', 'SteamCopy', 'SteamAutomatic', 'SteamAutomaticHelp',
+               'SteamSet', 'SteamUse', 'SteamOff', 'SteamAutoStart'}
+        for code in main:
+            with self.subTest(language=code):
+                self.assertEqual({k: v for k, v in steam[code].items() if k not in own}, main[code])
+                self.assertEqual(set(steam[code]) - set(main[code]), own)
+                self.assertTrue(all(steam[code][k].strip() for k in own))
+        xaml = WITH_STEAM.read_text()
+        self.assertEqual(set(re.findall(r'Ui\.(Steam\w+)', xaml)), own)
+        self.assertTrue(all(ord(c) < 128 for c in xaml))
 
 
 if __name__ == '__main__':
